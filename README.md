@@ -1,0 +1,69 @@
+# Apartment Measure
+
+Check an apartment's real floor area against the advertised figure, and size the aircon for each space. You start from a 2D floor plan image, and the app walks you through measuring every wall on site.
+
+## Run it
+
+```sh
+npm install
+npm run dev        # API on :8787 + web app on http://localhost:5173
+npm test           # geometry + API tests
+npm run build      # type-check and build the web app into dist/
+npm start          # production: one process serves dist/ and the API on :8787
+```
+
+To try it from your phone on the same Wi-Fi, run `npm run build && npm start`, then open `http://<your-computer's-IP>:8787` on the phone.
+
+### Configuration (environment variables)
+
+| Variable      | Default                      | Purpose                                               |
+| ------------- | ---------------------------- | ----------------------------------------------------- |
+| `PORT`        | `8787`                       | HTTP port                                             |
+| `DB_PATH`     | `data/apartment-measure.db`  | SQLite database file                                  |
+| `UPLOADS_DIR` | `data/uploads`               | Plan images, one folder per layout                    |
+| `ACCESS_KEY`  | *(unset)*                    | If set, the app asks for this key once on each device |
+
+Set `ACCESS_KEY` whenever the server can be reached from the internet.
+
+## Storage
+
+- **SQLite** (`data/apartment-measure.db`, built into Node, so nothing to install):
+  - `layouts`: one row per layout. The rooms, measurements and settings are stored as a JSON document, with a `revision` number.
+  - `layout_images`: records which image file belongs to each layout.
+  - Schema changes are versioned in `server/db.ts` (`MIGRATIONS`, tracked with `PRAGMA user_version`).
+- **Plan images** are plain files on disk: `data/uploads/<layout-id>/plan-<n>.jpg`. To back everything up, copy the `data/` folder.
+- **Saving** happens automatically, a moment after each edit. Every edit is also kept in the browser until the server confirms it. If the phone loses signal on site, the header shows "Offline · kept on this device" and the edits are sent once it reconnects.
+- **Two devices** (e.g. phone and laptop): if one saves a newer version, the other gets a banner offering "Load the other version" or "Keep mine" instead of silently overwriting. Each save carries the revision it was based on; the server rejects the save if a newer one exists.
+- **Export / import**: Settings → Export layout produces a single file with the image embedded, and Layouts → Import from file loads one.
+
+## Workflow
+
+0. **Layouts**: create one layout per apartment you're checking. You can switch between them from the name at the top left.
+1. **Plan** (easier on a laptop)
+   - Upload the plan image.
+   - **Set scale**: tap both ends of a printed dimension, such as the 12300 line, and enter its real length.
+   - **Draw room**: trace each room along the *inside* faces of its walls. Corners snap to straight lines and line up with other rooms' corners. Mark boundaries with no wall (open plan) as **Open**.
+   - Set each room's type, and put open-plan spaces in a shared **aircon zone**.
+2. **Measure** (on site, on your phone)
+   - For each room, enter the ceiling height, then go wall by wall from corner A to corner B. The plan's estimate is shown, and a reading more than 8% (or 150 mm) off it is flagged.
+   - You can skip a wall you can't reach. It is worked out from the other walls.
+   - Optionally enter the wall thickness (measure it at a door frame) and the doors and windows on each wall.
+3. **3D**: orbit around the model, cut the walls at 1.2 m to see the layout, and show the plan underneath.
+4. **Report**: net area, estimated built-up area, a comparison with the advertised area, a per-room table, aircon sizing, and a CSV export.
+
+## How the numbers are worked out
+
+- **Room closure.** Wall directions come from the traced plan and lengths come from your tape. Real measurements never close a room perfectly, so lengths are adjusted by weighted least squares until the outline closes exactly (`src/geometry/closure.ts`). The size of the adjustment taken up by measured walls is the room's *closure error*. A room is flagged when that error exceeds the tolerance (25 mm by default). Unmeasured walls are loose priors, so a skipped wall absorbs the error in its own direction.
+- **Placement.** Each room is shifted, again by least squares, so that faces on either side of a shared wall end up exactly one *measured* wall thickness apart (`src/geometry/layout.ts`). Shared and external walls are detected from the plan.
+- **Areas.**
+  - *Net* is the sum of the room interiors.
+  - *Built-up* is the union of all rooms, each grown by the wall thickness it owns: half of an internal wall, and all of an external wall. **Settings** lets you count external walls at 100%, 50% or 0%, because developers measure this differently.
+- **Aircon.** Area (ft²) × 60 BTU/h × (ceiling height ÷ 2.7 m), plus 10% for sun-exposed rooms. The result is rounded up to a standard 1.0, 1.5, 2.0 or 2.5 HP unit. This is a Malaysian rule of thumb: use it for budgeting, and confirm with the installer.
+
+## Known limits / next ideas
+
+- Wall angles come from the plan, so a room that is out of square isn't detected. Measuring the diagonals would fix this.
+- Room tracing is manual. A vision model could draft the rooms for you to correct.
+- Plans in PDF format need converting to an image first.
+- Laser measure over Bluetooth (Bosch/Leica) works on Android Chrome only.
+- Only one user; there are no accounts.
