@@ -6,5 +6,5 @@ export default defineConfig({
   base: './',
   plugins: [react()],
   // In dev the API runs as a separate process (see `npm run dev`).
-  server: { proxy: { '/api': 'http://127.0.0.1:8787' } },
+  server: { proxy: { '/api': `http://127.0.0.1:${process.env.API_PORT ?? 8787}` } },
 })

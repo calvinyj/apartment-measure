@@ -1,13 +1,20 @@
 import { useState } from 'react'
 import { downloadFile, useStore } from '../store'
 import { exportLayout, uploadPlanImage } from '../sync'
-import type { LengthUnit } from '../types'
-import { Field, LengthInput, Segmented } from './common'
+import type { LengthUnit, TraceMode } from '../types'
+import { Field, LengthInput, Segmented, useSolved } from './common'
+
+const TRACE_LABEL: Record<Exclude<TraceMode, 'auto'>, string> = {
+  inside: 'Inside face',
+  centre: 'Centre line',
+  outside: 'Outside face',
+}
 
 export function SettingsPage() {
   const project = useStore((s) => s.project)
   const { updateSettings, setName, setCalibration, setTab } = useStore.getState()
   const s = project.settings
+  const solved = useSolved()
   const [msg, setMsg] = useState<string | null>(null)
   const run = (f: () => Promise<void>) => f().catch((err: Error) => setMsg(err.message))
 
@@ -89,6 +96,26 @@ export function SettingsPage() {
             <LengthInput value={s.externalThickness} unit={s.inputUnit} onChange={(v) => v && updateSettings({ externalThickness: v })} />
           </Field>
         </div>
+      </section>
+
+      <section className="card stack">
+        <h3>Tracing</h3>
+        <Field
+          label="Outer walls were traced along their"
+          hint={
+            <>
+              Shared walls are worked out from the gap between rooms. Outer walls have no neighbour, so this says which line
+              you followed. Auto copies what you did on shared walls — currently <strong>{TRACE_LABEL[solved.traceMode].toLowerCase()}</strong>.
+            </>
+          }
+        >
+          <select value={s.traceMode} onChange={(e) => updateSettings({ traceMode: e.target.value as TraceMode })}>
+            <option value="auto">Auto</option>
+            <option value="inside">{TRACE_LABEL.inside}</option>
+            <option value="centre">{TRACE_LABEL.centre}</option>
+            <option value="outside">{TRACE_LABEL.outside}</option>
+          </select>
+        </Field>
       </section>
 
       <section className="card stack">

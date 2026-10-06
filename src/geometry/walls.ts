@@ -1,6 +1,6 @@
 import type { Vec2 } from '../types'
 import type { Solved, SolvedRoom } from './solve'
-import { add, dot, lineIntersect, outward, scale, sub } from './vec'
+import { add, dist, dot, lineIntersect, outward, scale, sub } from './vec'
 
 export interface WallPiece {
   /** convex footprint in plan mm */
@@ -44,26 +44,29 @@ function polyArea(pts: Vec2[]) {
   return Math.abs(s / 2)
 }
 
-/** Openings on this wall plus any drawn on the neighbouring room's side of it. */
+/**
+ * Openings that cut through edge k: its own, those entered on another part of the
+ * same straight wall (positioned from that part's start), and those drawn on the
+ * neighbouring room's side of the wall. All are placed in world space, then
+ * projected onto this edge.
+ */
 function cutsFor(solved: Solved, r: SolvedRoom, k: number): Cut[] {
-  const p = r.outline[k]
+  const p = r.starts[k]
   const d = r.dirs[k]
-  const cuts: Cut[] = r.room.edges[k].openings.map((o) => ({
-    from: o.offset,
-    to: o.offset + o.width,
-    sill: o.sill,
-    head: o.sill + o.height,
-  }))
+  const cuts: Cut[] = []
+  const add_ = (start: Vec2, dir: Vec2, o: { offset: number; width: number; sill: number; height: number }) => {
+    const u1 = dot(sub(add(start, scale(dir, o.offset)), p), d)
+    const u2 = dot(sub(add(start, scale(dir, o.offset + o.width)), p), d)
+    cuts.push({ from: Math.min(u1, u2), to: Math.max(u1, u2), sill: o.sill, head: o.sill + o.height })
+  }
+  const group = r.groups.find((g) => g.includes(k)) ?? [k]
+  for (const j of group) for (const o of r.room.edges[j].openings) add_(r.starts[j], r.dirs[j], o)
+
   for (const nb of r.edgeInfo[k].neighbors) {
     const other = solved.byId.get(nb.roomId)
     if (!other) continue
-    const q = other.outline[nb.edge]
-    const e = other.dirs[nb.edge]
-    for (const o of other.room.edges[nb.edge].openings) {
-      const u1 = dot(sub(add(q, scale(e, o.offset)), p), d)
-      const u2 = dot(sub(add(q, scale(e, o.offset + o.width)), p), d)
-      cuts.push({ from: Math.min(u1, u2), to: Math.max(u1, u2), sill: o.sill, head: o.sill + o.height })
-    }
+    const otherGroup = other.groups.find((g) => g.includes(nb.edge)) ?? [nb.edge]
+    for (const j of otherGroup) for (const o of other.room.edges[j].openings) add_(other.starts[j], other.dirs[j], o)
   }
   return cuts
 }
@@ -90,24 +93,29 @@ function solidRanges(active: Cut[], top: number): [number, number][] {
  * mitred corners so neighbouring segments meet cleanly.
  */
 export function roomWallPieces(solved: Solved, r: SolvedRoom, displayHeight: number): WallPiece[] {
-  const pts = r.outline
-  const n = pts.length
+  const n = r.starts.length
   const w = r.edgeInfo.map((info) => info.ownThickness)
   const top = Math.min(r.height, displayHeight)
   const pieces: WallPiece[] = []
 
-  const outerLine = (i: number) => ({ p: add(pts[i], scale(outward(r.dirs[i]), w[i])), d: r.dirs[i] })
+  const outerLine = (i: number) => ({ p: add(r.starts[i], scale(outward(r.dirs[i]), w[i])), d: r.dirs[i] })
+  // Mitre only where two edges actually meet; across a step, ends are square.
+  const meets = (i: number, j: number) => dist(r.ends[i], r.starts[j]) < 0.5
 
   for (let k = 0; k < n; k++) {
     if (r.room.edges[k].kind !== 'wall' || w[k] <= 0) continue
-    const p0 = pts[k]
-    const p1 = pts[(k + 1) % n]
+    const p0 = r.starts[k]
+    const p1 = r.ends[k]
     const d = r.dirs[k]
+    const kPrev = (k - 1 + n) % n
+    const kNext = (k + 1) % n
     const cur = outerLine(k)
-    const prev = outerLine((k - 1 + n) % n)
-    const next = outerLine((k + 1) % n)
-    const o0 = lineIntersect(prev.p, prev.d, cur.p, cur.d) ?? cur.p
-    const o1 = lineIntersect(cur.p, cur.d, next.p, next.d) ?? add(p1, scale(outward(d), w[k]))
+    const prev = outerLine(kPrev)
+    const next = outerLine(kNext)
+    const square0 = cur.p
+    const square1 = add(p1, scale(outward(d), w[k]))
+    const o0 = meets(kPrev, k) ? (lineIntersect(prev.p, prev.d, cur.p, cur.d) ?? square0) : square0
+    const o1 = meets(k, kNext) ? (lineIntersect(cur.p, cur.d, next.p, next.d) ?? square1) : square1
     const quad = [p0, p1, o1, o0]
 
     const L = dot(sub(p1, p0), d)

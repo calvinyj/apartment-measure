@@ -331,8 +331,8 @@ function PlanOverview({ onTool }: { onTool: (t: Tool) => void }) {
         </ul>
       )}
       <p className="muted small">
-        Tip: trace the <em>inside</em> face of the walls — the line you'd measure along with a tape. Rooms that share a
-        wall should each be traced on their own side of it. Open-plan areas can be split with an “open” edge.
+        Tip: trace either the middle of each wall (neighbouring rooms then share a line) or each room’s inside face — the
+        app works out where the wall faces are. Open-plan areas can be split with an “open” edge.
       </p>
     </div>
   )

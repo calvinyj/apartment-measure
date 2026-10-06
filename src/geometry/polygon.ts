@@ -88,6 +88,7 @@ export function offsetPolygon(pts: Vec2[], offsets: number[]): Vec2[] {
     const dCur = dirs[k]
     const pPrev = add(p, scale(outward(dPrev), offsets[iPrev]))
     const pCur = add(p, scale(outward(dCur), offsets[k]))
-    return lineIntersect(pPrev, dPrev, pCur, dCur) ?? pCur
+    // Collinear neighbours can't both keep their offset; favour the larger (a wall over an open edge).
+    return lineIntersect(pPrev, dPrev, pCur, dCur) ?? (Math.abs(offsets[iPrev]) > Math.abs(offsets[k]) ? pPrev : pCur)
   })
 }

@@ -63,3 +63,46 @@ describe('pickUnits', () => {
     expect(pickUnits(30000)).toMatchObject({ hp: '2.0 HP', count: 2 })
   })
 })
+
+describe('a side that is partly open and partly wall', () => {
+  // Like a balcony: the top edge is open for 3.9 m, then a 1.25 m wall on the same line.
+  const r = room('bal', [[0, 0], [390, 0], [515, 0], [515, 150], [0, 150]])
+  r.edges[0].kind = 'open'
+  const project: Project = {
+    version: 2,
+    name: 't',
+    image: null,
+    calibration: { a: { x: 0, y: 0 }, b: { x: 100, y: 0 }, mm: 1000 },
+    rooms: [r],
+    settings: { ...DEFAULT_SETTINGS, traceMode: 'centre', externalThickness: 200 },
+    advertised: null,
+  }
+  const solved = solveProject(project)
+  const s = solved.byId.get('bal')!
+
+  it('keeps every wall piece next to the room (no runaway mitres)', () => {
+    for (const p of roomWallPieces(solved, s, Infinity)) {
+      for (const q of p.footprint) {
+        expect(q.x).toBeGreaterThan(-250)
+        expect(q.x).toBeLessThan(5150 + 250)
+        expect(q.y).toBeGreaterThan(-250)
+        expect(q.y).toBeLessThan(1500 + 250)
+      }
+    }
+  })
+
+  it('keeps the open stretch straight and steps down to the wall face', () => {
+    // Open part stays on the traced line; the wall part's inside face is 100 mm in (half of 200).
+    expect(s.planStarts[0].y).toBeCloseTo(0)
+    expect(s.planEnds[0].y).toBeCloseTo(0)
+    expect(s.planStarts[1].y).toBeCloseTo(100)
+    expect(s.planEnds[1].y).toBeCloseTo(100)
+    // (5050 − 100) × (1400 − 0), minus the 1150 × 100 strip under the short wall.
+    expect(s.area / 1e6).toBeCloseTo((4950 * 1400 - 1150 * 100) / 1e6, 4)
+  })
+
+  it('keeps the built-up area within the outer box', () => {
+    // Traced box grown by half an external wall on every side, at most.
+    expect(solved.grossArea / 1e6).toBeLessThanOrEqual((5150 + 200) * (1500 + 200) / 1e6 + 1e-6)
+  })
+})

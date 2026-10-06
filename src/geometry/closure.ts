@@ -34,11 +34,13 @@ const UNMEASURED_SIGMA = 1000
 /**
  * Least-squares closure: walls keep their plan directions; lengths are adjusted
  * minimally (weighted by their uncertainty) so the outline closes exactly.
+ * `fixed` is the sum of any fixed offsets on the way round (small steps where a
+ * wall face and an open edge meet on one traced line).
  */
-export function closeRoom(edges: ClosureEdge[]): ClosureResult {
+export function closeRoom(edges: ClosureEdge[], fixed: Vec2 = { x: 0, y: 0 }): ClosureResult {
   const sig2 = edges.map((e) => (e.measured ? measuredSigma(e.length) : UNMEASURED_SIGMA) ** 2)
 
-  const e = { x: 0, y: 0 }
+  const e = { x: fixed.x, y: fixed.y }
   let a = 0
   let b = 0
   let c = 0

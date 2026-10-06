@@ -85,8 +85,12 @@ export interface Calibration {
 
 export type LengthUnit = 'mm' | 'cm' | 'm'
 
+/** Where the outer walls were traced; shared walls are worked out from the gap between rooms. */
+export type TraceMode = 'auto' | 'inside' | 'centre' | 'outside'
+
 export interface Settings {
   inputUnit: LengthUnit
+  traceMode: TraceMode
   defaultHeight: number
   internalThickness: number
   externalThickness: number
@@ -101,6 +105,7 @@ export interface Settings {
 
 export const DEFAULT_SETTINGS: Settings = {
   inputUnit: 'mm',
+  traceMode: 'auto',
   defaultHeight: 2700,
   internalThickness: 150,
   externalThickness: 200,

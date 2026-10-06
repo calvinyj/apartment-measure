@@ -18,10 +18,13 @@ export function norm(a: Vec2): Vec2 {
 /** Outward normal of an edge direction, for polygons with positive signed area. */
 export const outward = (d: Vec2): Vec2 => ({ x: d.y, y: -d.x })
 
-/** Intersection of lines p + t·d and q + s·e; null when (nearly) parallel. */
+/** Below this (≈5°) two directions count as one straight line: a mitre would shoot off to infinity. */
+export const NEARLY_PARALLEL = Math.sin((5 * Math.PI) / 180)
+
+/** Intersection of lines p + t·d and q + s·e (unit directions); null when nearly parallel. */
 export function lineIntersect(p: Vec2, d: Vec2, q: Vec2, e: Vec2): Vec2 | null {
   const den = cross(d, e)
-  if (Math.abs(den) < 1e-9) return null
+  if (Math.abs(den) < NEARLY_PARALLEL) return null
   const t = cross(sub(q, p), e) / den
   return add(p, scale(d, t))
 }

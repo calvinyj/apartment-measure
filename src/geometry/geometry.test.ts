@@ -129,3 +129,42 @@ describe('solveProject', () => {
     expect(s.grossArea / 1e6).toBeCloseTo((6500 * 3400) / 1e6, 2)
   })
 })
+
+describe('rooms traced on wall centre lines', () => {
+  // Two 3 m squares sharing the line x = 3000 mm, as if tracing down the middle of each wall.
+  const project: Project = {
+    version: 2,
+    name: 'c',
+    image: null,
+    calibration: { a: { x: 0, y: 0 }, b: { x: 100, y: 0 }, mm: 1000 },
+    rooms: [
+      room('a', [[0, 0], [300, 0], [300, 300], [0, 300]], [null, null, null, null]),
+      room('b', [[300, 0], [600, 0], [600, 300], [300, 300]], [null, null, null, null]),
+    ],
+    settings: { ...DEFAULT_SETTINGS, internalThickness: 100, externalThickness: 200, externalShare: 1 },
+    advertised: null,
+  }
+  const s = solveProject(project)
+  const a = s.byId.get('a')!
+  const b = s.byId.get('b')!
+
+  it('detects centre-line tracing and finds the inside faces', () => {
+    expect(s.traceMode).toBe('centre')
+    expect(a.edgeInfo[1].side).toBe('internal')
+    // Inside faces: 100 mm in from outer centre lines (half of 200), 50 mm from the shared one.
+    expect(a.estimates[0]).toBeCloseTo(3000 - 100 - 50)
+    expect(a.estimates[1]).toBeCloseTo(3000 - 100 - 100)
+  })
+
+  it('keeps rooms where they were traced, one wall apart', () => {
+    expect(a.outline[0].x).toBeCloseTo(100, 0)
+    expect(a.outline[0].y).toBeCloseTo(100, 0)
+    expect(b.outline[0].x - a.outline[1].x).toBeCloseTo(100, 0)
+  })
+
+  it('does not count walls in the net area, and counts them once in built-up', () => {
+    expect(s.netArea / 1e6).toBeCloseTo((2 * 2850 * 2800) / 1e6, 3)
+    // Outer faces sit half an external wall beyond the traced lines.
+    expect(s.grossArea / 1e6).toBeCloseTo((6200 * 3200) / 1e6, 3)
+  })
+})

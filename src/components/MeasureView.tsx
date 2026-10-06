@@ -2,8 +2,9 @@ import { useRef } from 'react'
 import { bbox, centroid, pointInPolygon } from '../geometry/polygon'
 import type { SolvedRoom } from '../geometry/solve'
 import { add, dist, dot, lerp, norm, outward, scale, sub } from '../geometry/vec'
+import { groupMeasured, groupOf, splitMeasured } from '../geometry/runs'
 import { useStore, type WizardStep } from '../store'
-import { roomTypeInfo, type Opening, type OpeningKind, type Room, type Vec2 } from '../types'
+import { roomTypeInfo, type Edge, type Opening, type OpeningKind, type Room, type Vec2 } from '../types'
 import { formatArea, formatLength, formatSqft } from '../units'
 import { Field, LengthInput, Segmented, useSolved } from './common'
 import { PlanView, type PointerInfo } from './PlanView'
@@ -39,8 +40,10 @@ export function MeasureView() {
 
   const room = wizard ? project.rooms.find((r) => r.id === wizard.roomId) : undefined
   const s = room ? solved.byId.get(room.id) : undefined
-  const step = wizard?.step ?? 'room'
-  const edgeIndex = typeof step === 'number' ? step : null
+  const rawStep = wizard?.step ?? 'room'
+  // Wall steps are keyed by the first edge of their group; normalise any edge index to that.
+  const activeGroup = s && typeof rawStep === 'number' ? groupOf(s.groups, rawStep) : null
+  const step: WizardStep = activeGroup ? activeGroup[0] : rawStep
 
   const k = solved.mmPerPx ?? 1
   const fit = (() => {
@@ -65,7 +68,7 @@ export function MeasureView() {
         }
       })
       if (best >= 0) {
-        setWizard({ roomId: room.id, step: best })
+        setWizard({ roomId: room.id, step: s ? groupOf(s.groups, best)[0] : best })
         return
       }
     }
@@ -82,7 +85,7 @@ export function MeasureView() {
             return (
               <>
                 <RoomShapes rooms={project.rooms} solved={solved} k={vk} selectedId={room?.id} dimmed={!!room} showArea={!room} />
-                {room && s && <EdgeLabels room={room} s={s} k={vk} mmPerPx={k} active={edgeIndex} />}
+                {room && s && <EdgeLabels room={room} s={s} k={vk} mmPerPx={k} active={activeGroup} />}
               </>
             )
           }}
@@ -96,7 +99,7 @@ export function MeasureView() {
         ) : step === 'summary' ? (
           <SummaryStep room={room} s={s} />
         ) : (
-          <WallStep key={`${room.id}-${step}`} room={room} s={s} index={step} />
+          <WallStep key={`${room.id}-${step}`} room={room} s={s} group={activeGroup ?? [step as number]} />
         )}
       </aside>
     </div>
@@ -150,43 +153,44 @@ function RoomPicker() {
   )
 }
 
-function StepNav({ room, step, nextLabel = 'Next', onNext }: { room: Room; step: WizardStep; nextLabel?: string; onNext?: () => void }) {
-  const setWizard = useStore((s) => s.setWizard)
-  const n = room.edges.length
-  const prev: WizardStep | null = step === 'room' ? null : step === 'summary' ? n - 1 : step === 0 ? 'room' : step - 1
-  const next: WizardStep = step === 'room' ? 0 : step === 'summary' ? 'summary' : step === n - 1 ? 'summary' : step + 1
+/** Previous/next wizard step, walking wall groups in order. */
+function neighbourSteps(s: SolvedRoom, step: WizardStep): { prev: WizardStep | null; next: WizardStep } {
+  const order = s.groups.map((g) => g[0])
+  if (step === 'room') return { prev: null, next: order[0] ?? 'summary' }
+  if (step === 'summary') return { prev: order[order.length - 1] ?? 'room', next: 'summary' }
+  const i = order.indexOf(groupOf(s.groups, step)[0])
+  return { prev: i <= 0 ? 'room' : order[i - 1], next: i === order.length - 1 ? 'summary' : order[i + 1] }
+}
+
+function StepNav({ room, s, step, nextLabel = 'Next' }: { room: Room; s: SolvedRoom; step: WizardStep; nextLabel?: string }) {
+  const setWizard = useStore((st) => st.setWizard)
+  const { prev, next } = neighbourSteps(s, step)
   return (
     <div className="wizard-nav">
       <button className="btn" onClick={() => (prev == null ? setWizard(null) : setWizard({ roomId: room.id, step: prev }))}>
         ← {prev == null ? 'Rooms' : 'Back'}
       </button>
-      <button
-        className="btn primary"
-        onClick={() => {
-          onNext?.()
-          setWizard({ roomId: room.id, step: next })
-        }}
-      >
+      <button className="btn primary" onClick={() => setWizard({ roomId: room.id, step: next })}>
         {nextLabel} →
       </button>
     </div>
   )
 }
 
-function Progress({ room, step }: { room: Room; step: WizardStep }) {
-  const setWizard = useStore((s) => s.setWizard)
+function Progress({ room, s, step }: { room: Room; s: SolvedRoom; step: WizardStep }) {
+  const setWizard = useStore((st) => st.setWizard)
   return (
     <div className="progress">
       <button className={step === 'room' ? 'on' : ''} onClick={() => setWizard({ roomId: room.id, step: 'room' })}>
         H
       </button>
-      {room.edges.map((e, i) => (
+      {s.groups.map((g, n) => (
         <button
-          key={e.id}
-          className={`${step === i ? 'on' : ''} ${e.kind === 'open' ? 'open' : e.measured != null ? 'done' : ''}`}
-          onClick={() => setWizard({ roomId: room.id, step: i })}
+          key={room.edges[g[0]].id}
+          className={`${step === g[0] ? 'on' : ''} ${room.edges[g[0]].kind === 'open' ? 'open' : groupMeasured(room, g) != null ? 'done' : ''}`}
+          onClick={() => setWizard({ roomId: room.id, step: g[0] })}
         >
-          {i + 1}
+          {n + 1}
         </button>
       ))}
       <button className={step === 'summary' ? 'on' : ''} onClick={() => setWizard({ roomId: room.id, step: 'summary' })}>
@@ -202,10 +206,10 @@ function RoomStep({ room, s }: { room: Room; s: SolvedRoom }) {
   const setWizard = useStore((st) => st.setWizard)
   return (
     <div className="stack">
-      <Progress room={room} step="room" />
+      <Progress room={room} s={s} step="room" />
       <h2>{room.name}</h2>
       <p className="muted">
-        {roomTypeInfo(room.type).label} · {room.edges.length} edges · plan estimate {formatArea(s.area)}
+        {roomTypeInfo(room.type).label} · {s.wallCount} walls to measure · plan estimate {formatArea(s.area)}
       </p>
       <Field
         label="Ceiling height"
@@ -216,7 +220,7 @@ function RoomStep({ room, s }: { room: Room; s: SolvedRoom }) {
           placeholder={settings.defaultHeight}
           unit={settings.inputUnit}
           onChange={(height) => updateRoom(room.id, { height })}
-          onEnter={() => setWizard({ roomId: room.id, step: 0 })}
+          onEnter={() => setWizard({ roomId: room.id, step: s.groups[0]?.[0] ?? 'summary' })}
           autoFocus
         />
       </Field>
@@ -234,42 +238,68 @@ function RoomStep({ room, s }: { room: Room; s: SolvedRoom }) {
           <option value="no">No</option>
         </select>
       </Field>
-      <StepNav room={room} step="room" nextLabel="Start walls" />
+      <StepNav room={room} s={s} step="room" nextLabel="Start walls" />
     </div>
   )
 }
 
-function WallStep({ room, s, index }: { room: Room; s: SolvedRoom; index: number }) {
+const sum = (xs: number[]) => xs.reduce((a, b) => a + b, 0)
+
+function WallStep({ room, s, group }: { room: Room; s: SolvedRoom; group: number[] }) {
   const settings = useStore((st) => st.project.settings)
   const rooms = useStore((st) => st.project.rooms)
   const { updateEdge, addOpening, updateOpening, removeOpening, setWizard } = useStore.getState()
-  const edge = room.edges[index]
-  const info = s.edgeInfo[index]
-  const estimate = s.estimates[index]
+  const first = group[0]
+  const edge = room.edges[first]
+  // Show thickness/side from the longest part; changes apply to the whole wall.
+  const main = group.reduce((a, b) => (s.estimates[b] > s.estimates[a] ? b : a))
+  const info = s.edgeInfo[main]
+  const estimate = sum(group.map((i) => s.estimates[i]))
+  const measured = groupMeasured(room, group)
   const unit = settings.inputUnit
-  const next = () => setWizard({ roomId: room.id, step: index === room.edges.length - 1 ? 'summary' : index + 1 })
-  const neighbourNames = [...new Set(info.neighbors.map((nb) => rooms.find((r) => r.id === nb.roomId)?.name).filter(Boolean))]
-  const currentLength = s.closure.lengths[index]
+  const number = s.groups.findIndex((g) => g[0] === first) + 1
+  const { next } = neighbourSteps(s, first)
+  const goNext = () => setWizard({ roomId: room.id, step: next })
+  const neighbourNames = [
+    ...new Set(group.flatMap((i) => s.edgeInfo[i].neighbors.map((nb) => rooms.find((r) => r.id === nb.roomId)?.name)).filter(Boolean)),
+  ]
+  // Where each part starts along the wall, so openings can be placed from corner A.
+  const starts = group.map((_, j) => sum(group.slice(0, j).map((i) => s.closure.lengths[i])))
+  const currentLength = sum(group.map((i) => s.closure.lengths[i]))
+  const openings = group.flatMap((i, j) => room.edges[i].openings.map((o) => ({ o, edge: i, start: starts[j] })))
 
+  const forAll = (patch: Partial<Edge>) => group.forEach((i) => updateEdge(room.id, i, patch))
+  const setMeasured = (total: number | null) => {
+    const parts = splitMeasured(total, group, s.estimates)
+    group.forEach((i, j) => updateEdge(room.id, i, { measured: parts[j] }))
+  }
   const setThickness = (thickness: number | null) => {
-    updateEdge(room.id, index, { thickness })
-    // A shared wall has one thickness; keep the neighbour's side in sync.
-    for (const nb of info.neighbors) updateEdge(nb.roomId, nb.edge, { thickness })
+    for (const i of group) {
+      updateEdge(room.id, i, { thickness })
+      // A shared wall has one thickness; keep the neighbour's side in sync.
+      for (const nb of s.edgeInfo[i].neighbors) updateEdge(nb.roomId, nb.edge, { thickness })
+    }
   }
 
   return (
     <div className="stack">
-      <Progress room={room} step={index} />
+      <Progress room={room} s={s} step={first} />
       <h2>
-        {room.name} · wall {index + 1} of {room.edges.length}
+        {room.name} · wall {number} of {s.groups.length}
       </h2>
       <p className="muted small">
         From corner <strong className="tag-a">A</strong> to <strong className="tag-b">B</strong> (highlighted on the plan)
         {neighbourNames.length ? ` · shared with ${neighbourNames.join(', ')}` : ''}
       </p>
+      {group.length > 1 && (
+        <p className="callout small">
+          One straight wall, traced in {group.length} parts. Measure it end to end; the length is shared between the parts using
+          the plan.
+        </p>
+      )}
       <Segmented
         value={edge.kind}
-        onChange={(kind) => updateEdge(room.id, index, { kind })}
+        onChange={(kind) => forAll({ kind })}
         options={[
           { value: 'wall', label: 'Wall' },
           { value: 'open', label: 'Open (no wall)' },
@@ -285,19 +315,12 @@ function WallStep({ room, s, index }: { room: Room; s: SolvedRoom; index: number
           </>
         }
       >
-        <LengthInput
-          value={edge.measured}
-          unit={unit}
-          placeholder={null}
-          onChange={(measured) => updateEdge(room.id, index, { measured })}
-          onEnter={next}
-          autoFocus
-        />
+        <LengthInput value={measured} unit={unit} placeholder={null} onChange={setMeasured} onEnter={goNext} autoFocus />
       </Field>
-      {edge.measured != null && deviates(edge.measured, estimate) && (
+      {measured != null && deviates(measured, estimate) && (
         <div className="callout warn">
-          That’s {Math.round(((edge.measured - estimate) / estimate) * 100)}% off the plan. Re-check the reading, or the plan
-          may be wrong here.
+          That’s {Math.round(((measured - estimate) / estimate) * 100)}% off the plan. Re-check the reading, or the plan may be
+          wrong here.
         </div>
       )}
 
@@ -321,7 +344,7 @@ function WallStep({ room, s, index }: { room: Room; s: SolvedRoom; index: number
           <Field label="Other side is">
             <Segmented
               value={edge.side}
-              onChange={(side) => updateEdge(room.id, index, { side })}
+              onChange={(side) => forAll({ side })}
               options={[
                 { value: 'auto', label: 'Auto' },
                 { value: 'internal', label: 'Inside the unit' },
@@ -335,31 +358,35 @@ function WallStep({ room, s, index }: { room: Room; s: SolvedRoom; index: number
       {edge.kind === 'wall' && (
         <div className="openings">
           <h3>Doors &amp; windows on this wall</h3>
-          {edge.openings.length === 0 && <p className="muted small">None. Add them for the 3D view and wall areas.</p>}
-          {edge.openings.map((o) => (
+          {openings.length === 0 && <p className="muted small">None. Add them for the 3D view and wall areas.</p>}
+          {openings.map(({ o, edge: i, start }) => (
             <div key={o.id} className="opening">
               <div className="row between">
-                <select value={o.kind} onChange={(e) => updateOpening(room.id, index, o.id, { kind: e.target.value as OpeningKind })}>
+                <select value={o.kind} onChange={(e) => updateOpening(room.id, i, o.id, { kind: e.target.value as OpeningKind })}>
                   <option value="door">Door</option>
                   <option value="window">Window</option>
                   <option value="opening">Opening</option>
                 </select>
-                <button className="btn ghost small" onClick={() => removeOpening(room.id, index, o.id)}>
+                <button className="btn ghost small" onClick={() => removeOpening(room.id, i, o.id)}>
                   Remove
                 </button>
               </div>
               <div className="grid2">
                 <Field label="Width">
-                  <LengthInput value={o.width} unit={unit} onChange={(v) => v != null && updateOpening(room.id, index, o.id, { width: v })} />
+                  <LengthInput value={o.width} unit={unit} onChange={(v) => v != null && updateOpening(room.id, i, o.id, { width: v })} />
                 </Field>
                 <Field label="Height">
-                  <LengthInput value={o.height} unit={unit} onChange={(v) => v != null && updateOpening(room.id, index, o.id, { height: v })} />
+                  <LengthInput value={o.height} unit={unit} onChange={(v) => v != null && updateOpening(room.id, i, o.id, { height: v })} />
                 </Field>
                 <Field label="From corner A">
-                  <LengthInput value={o.offset} unit={unit} onChange={(v) => v != null && updateOpening(room.id, index, o.id, { offset: v })} />
+                  <LengthInput
+                    value={start + o.offset}
+                    unit={unit}
+                    onChange={(v) => v != null && updateOpening(room.id, i, o.id, { offset: v - start })}
+                  />
                 </Field>
                 <Field label="Sill (floor to bottom)">
-                  <LengthInput value={o.sill} unit={unit} onChange={(v) => v != null && updateOpening(room.id, index, o.id, { sill: v })} />
+                  <LengthInput value={o.sill} unit={unit} onChange={(v) => v != null && updateOpening(room.id, i, o.id, { sill: v })} />
                 </Field>
               </div>
             </div>
@@ -371,7 +398,8 @@ function WallStep({ room, s, index }: { room: Room; s: SolvedRoom; index: number
                 className="btn small"
                 onClick={() => {
                   const d = OPENING_DEFAULTS[kind]
-                  addOpening(room.id, index, { ...d, offset: Math.max(0, Math.round((currentLength - d.width) / 2)) })
+                  // Stored on the first part, positioned from corner A along the whole wall.
+                  addOpening(room.id, first, { ...d, offset: Math.max(0, Math.round((currentLength - d.width) / 2)) })
                 }}
               >
                 + {kind[0].toUpperCase() + kind.slice(1)}
@@ -381,7 +409,7 @@ function WallStep({ room, s, index }: { room: Room; s: SolvedRoom; index: number
         </div>
       )}
 
-      <StepNav room={room} step={index} nextLabel={edge.measured == null ? 'Skip' : 'Next'} />
+      <StepNav room={room} s={s} step={first} nextLabel={measured == null ? 'Skip' : 'Next'} />
     </div>
   )
 }
@@ -392,17 +420,28 @@ function SummaryStep({ room, s }: { room: Room; s: SolvedRoom }) {
   const setWizard = useStore((st) => st.setWizard)
   const unit = settings.inputUnit
   const c = s.closure
-  const skipped = room.edges.map((e, i) => (e.kind === 'wall' && e.measured == null ? i : -1)).filter((i) => i >= 0)
-  const fromPlan = room.edges.map((e, i) => (e.measured == null ? i : -1)).filter((i) => i >= 0)
-  const worst = room.edges
-    .map((e, i) => ({ i, dev: e.measured != null ? Math.abs(e.measured - s.estimates[i]) / s.estimates[i] : 0 }))
-    .sort((a, b) => b.dev - a.dev)[0]
+  const rows = s.groups.map((g, n) => {
+    const plan = sum(g.map((i) => s.estimates[i]))
+    const measured = groupMeasured(room, g)
+    return {
+      g,
+      n: n + 1,
+      open: room.edges[g[0]].kind === 'open',
+      plan,
+      measured,
+      used: sum(g.map((i) => c.lengths[i])),
+      dev: measured != null ? Math.abs(measured - plan) / plan : 0,
+    }
+  })
+  const skipped = rows.filter((r) => !r.open && r.measured == null).map((r) => r.n)
+  const fromPlan = rows.filter((r) => r.measured == null).map((r) => r.n)
+  const worst = [...rows].sort((a, b) => b.dev - a.dev)[0]
   const idx = rooms.findIndex((r) => r.id === room.id)
   const nextRoom = rooms[idx + 1]
 
   return (
     <div className="stack">
-      <Progress room={room} step="summary" />
+      <Progress room={room} s={s} step="summary" />
       <h2>{room.name} · summary</h2>
       <div className="stat-row">
         <div className="stat">
@@ -423,15 +462,15 @@ function SummaryStep({ room, s }: { room: Room; s: SolvedRoom }) {
           {s.closureOk ? '✓ ' : '⚠ '}
           Walls agree to within <strong>{Math.round(c.measuredError)} mm</strong> (tolerance {settings.closureTolerance} mm).
           {!s.closureOk && worst && worst.dev > 0.02 && (
-            <> Most suspicious: wall {worst.i + 1} ({Math.round(worst.dev * 100)}% off the plan).</>
+            <> Most suspicious: wall {worst.n} ({Math.round(worst.dev * 100)}% off the plan).</>
           )}
           {!s.closureOk && <> Re-measure the longest walls first.</>}
         </div>
       )}
       {s.status !== 'empty' && c.checkable === 'partial' && (
         <div className={`callout ${s.closureOk ? 'ok' : 'warn'}`}>
-          Wall {skipped.map((i) => i + 1).join(', ')} {skipped.length === 1 ? 'was' : 'were'} worked out from the others. The other
-          direction checks out to {Math.round(c.measuredError)} mm.
+          Wall {skipped.join(', ')} {skipped.length === 1 ? 'was' : 'were'} worked out from the others. The other direction
+          checks out to {Math.round(c.measuredError)} mm.
         </div>
       )}
       {s.status !== 'empty' && c.checkable === 'none' && (
@@ -439,8 +478,8 @@ function SummaryStep({ room, s }: { room: Room; s: SolvedRoom }) {
       )}
       {!c.determined && s.status !== 'empty' && (
         <div className="callout warn">
-          Some lengths (wall {fromPlan.map((i) => i + 1).join(', ')}) still rely on the plan’s scale. Measure at least one wall
-          on each side of the room.
+          Some lengths (wall {fromPlan.join(', ')}) still rely on the plan’s scale. Measure at least one wall on each side of the
+          room.
         </div>
       )}
 
@@ -454,15 +493,15 @@ function SummaryStep({ room, s }: { room: Room; s: SolvedRoom }) {
           </tr>
         </thead>
         <tbody>
-          {room.edges.map((e, i) => (
-            <tr key={e.id} onClick={() => setWizard({ roomId: room.id, step: i })} className="clickable">
+          {rows.map((r) => (
+            <tr key={room.edges[r.g[0]].id} onClick={() => setWizard({ roomId: room.id, step: r.g[0] })} className="clickable">
               <td>
-                {i + 1}
-                {e.kind === 'open' ? ' (open)' : ''}
+                {r.n}
+                {r.open ? ' (open)' : ''}
               </td>
-              <td className="muted">{formatLength(s.estimates[i], unit)}</td>
-              <td>{e.measured != null ? formatLength(e.measured, unit) : <span className="muted">—</span>}</td>
-              <td>{formatLength(c.lengths[i], unit)}</td>
+              <td className="muted">{formatLength(r.plan, unit)}</td>
+              <td>{r.measured != null ? formatLength(r.measured, unit) : <span className="muted">—</span>}</td>
+              <td>{formatLength(r.used, unit)}</td>
             </tr>
           ))}
         </tbody>
@@ -487,49 +526,76 @@ function SummaryStep({ room, s }: { room: Room; s: SolvedRoom }) {
   )
 }
 
-/** Length labels for every wall of the focused room, with the active wall highlighted. */
-function EdgeLabels({ room, s, k, mmPerPx, active }: { room: Room; s: SolvedRoom; k: number; mmPerPx: number; active: number | null }) {
+/** One length label per wall (a split straight wall gets one), with the active wall highlighted. */
+function EdgeLabels({ room, s, k, mmPerPx, active }: { room: Room; s: SolvedRoom; k: number; mmPerPx: number; active: number[] | null }) {
   const unit = useStore((st) => st.project.settings.inputUnit)
-  const n = room.points.length
-  const c = centroid(room.points)
+  // Draw on the inside faces (what gets measured), which may sit inside the traced lines.
+  const px = (p: Vec2) => scale(p, 1 / mmPerPx)
+  const pts = s.planMm.map(px)
+  const starts = s.planStarts.map(px)
+  const ends = s.planEnds.map(px)
+  const c = centroid(pts)
   return (
     <g pointerEvents="none">
-      {room.points.map((a, i) => {
-        const b = room.points[(i + 1) % n]
-        const e = room.edges[i]
+      <polygon
+        points={pts.map((p) => `${p.x},${p.y}`).join(' ')}
+        fill="none"
+        stroke="#1f2933"
+        strokeWidth={1}
+        strokeDasharray="3 3"
+        vectorEffect="non-scaling-stroke"
+      />
+      {s.groups.map((g) => {
+        const a = starts[g[0]]
+        const b = ends[g[g.length - 1]]
+        const first = room.edges[g[0]]
+        const measured = groupMeasured(room, g)
         const d = norm(sub(b, a))
-        const inward = scale(outward(d), -1)
-        const mid = lerp(a, b, 0.5)
-        const labelPos = add(mid, scale(inward, 16 / k))
-        const isActive = i === active
-        const text = e.measured != null ? formatLength(e.measured, unit) : `≈ ${formatLength(s.estimates[i], unit)}`
+        const labelPos = add(lerp(a, b, 0.5), scale(outward(d), -16 / k))
+        const isActive = active?.[0] === g[0]
+        const text = measured != null ? formatLength(measured, unit) : `≈ ${formatLength(sum(g.map((i) => s.estimates[i])), unit)}`
         const angle = (Math.atan2(d.y, d.x) * 180) / Math.PI
         const upright = angle > 90 || angle < -90 ? angle + 180 : angle
-        // Openings, drawn along the wall at their offset (converted back to plan px).
         return (
-          <g key={e.id}>
+          <g key={first.id}>
             {isActive && (
               <>
-                <line x1={a.x} y1={a.y} x2={b.x} y2={b.y} stroke="#f97316" strokeWidth={6} strokeLinecap="round" vectorEffect="non-scaling-stroke" />
+                {g.map((i) => (
+                  <line
+                    key={i}
+                    x1={starts[i].x}
+                    y1={starts[i].y}
+                    x2={ends[i].x}
+                    y2={ends[i].y}
+                    stroke="#f97316"
+                    strokeWidth={6}
+                    strokeLinecap="round"
+                    vectorEffect="non-scaling-stroke"
+                  />
+                ))}
                 <Marker p={a} k={k} label="A" color="#f97316" toward={c} />
                 <Marker p={b} k={k} label="B" color="#7c3aed" toward={c} />
               </>
             )}
-            {e.openings.map((o) => {
-              const p0 = add(a, scale(d, o.offset / mmPerPx))
-              const p1 = add(a, scale(d, (o.offset + o.width) / mmPerPx))
-              return (
-                <line
-                  key={o.id}
-                  x1={p0.x}
-                  y1={p0.y}
-                  x2={p1.x}
-                  y2={p1.y}
-                  stroke={o.kind === 'window' ? '#0ea5e9' : '#a16207'}
-                  strokeWidth={isActive ? 4 : 3}
-                  vectorEffect="non-scaling-stroke"
-                />
-              )
+            {g.flatMap((i) => {
+              // Openings, drawn along their part at their offset (converted back to plan px).
+              const di = s.dirs[i]
+              return room.edges[i].openings.map((o) => {
+                const p0 = add(starts[i], scale(di, o.offset / mmPerPx))
+                const p1 = add(starts[i], scale(di, (o.offset + o.width) / mmPerPx))
+                return (
+                  <line
+                    key={o.id}
+                    x1={p0.x}
+                    y1={p0.y}
+                    x2={p1.x}
+                    y2={p1.y}
+                    stroke={o.kind === 'window' ? '#0ea5e9' : '#a16207'}
+                    strokeWidth={isActive ? 4 : 3}
+                    vectorEffect="non-scaling-stroke"
+                  />
+                )
+              })
             })}
             <text
               x={labelPos.x}
@@ -538,9 +604,9 @@ function EdgeLabels({ room, s, k, mmPerPx, active }: { room: Room; s: SolvedRoom
               textAnchor="middle"
               dominantBaseline="middle"
               transform={`rotate(${upright} ${labelPos.x} ${labelPos.y})`}
-              className={`plan-label ${e.measured != null ? 'measured' : 'estimate'} ${isActive ? 'active' : ''}`}
+              className={`plan-label ${measured != null ? 'measured' : 'estimate'} ${isActive ? 'active' : ''}`}
             >
-              {e.kind === 'open' && e.measured == null ? 'open' : text}
+              {first.kind === 'open' && measured == null ? 'open' : text}
             </text>
           </g>
         )
