@@ -10,7 +10,7 @@ import { useStore } from '../store'
 import { uploadPlanImage } from '../sync'
 import { ROOM_TYPES, roomTypeInfo, type Room, type RoomType, type Vec2 } from '../types'
 import { formatLength } from '../units'
-import { Field, LengthInput, Segmented, useSolved } from './common'
+import { Field, InstalledAcField, LengthInput, Segmented, useSolved } from './common'
 import { CompassBadge, CompassDial, DegreeInput } from './Compass'
 import { PlanView, type PointerInfo } from './PlanView'
 import { RoomShapes } from './RoomShapes'
@@ -610,6 +610,7 @@ function RoomInspector({ room, selVertex, clearVertex }: { room: Room; selVertex
           ))}
         </datalist>
       </Field>
+      <InstalledAcField room={room} />
 
       <h3>Edges</h3>
       <p className="muted small">Mark boundaries without a physical wall (open plan) as “Open”.</p>

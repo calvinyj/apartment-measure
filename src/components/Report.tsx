@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { acZones } from '../ac'
+import { acZones, hpLabel, type AcZone } from '../ac'
 import { formatFacing, roomFacing } from '../geometry/facing'
 import { downloadFile, useStore } from '../store'
 import { roomTypeInfo } from '../types'
@@ -7,6 +7,8 @@ import { formatArea, formatLength, formatSqft, fmtInt, M2_TO_SQFT, m2 } from '..
 import { useSolved } from './common'
 
 const pct = (x: number) => `${x >= 0 ? '+' : ''}${(x * 100).toFixed(1)}%`
+const installedLabel = (z: AcZone) => z.installed.map((u) => hpLabel(u.hp)).join(' + ')
+const suggestedLabel = (z: AcZone) => `${z.units.count > 1 ? `${z.units.count} × ` : ''}${hpLabel(z.units.hp)}`
 
 export function Report() {
   const project = useStore((s) => s.project)
@@ -51,14 +53,17 @@ export function Report() {
       ['Total net', '', '', m2(solved.netArea).toFixed(2), (m2(solved.netArea) * M2_TO_SQFT).toFixed(1)],
       ['Estimated built-up (incl. walls)', '', '', m2(solved.grossArea).toFixed(2), (m2(solved.grossArea) * M2_TO_SQFT).toFixed(1)],
       [],
-      ['Aircon zone', 'Rooms', 'Afternoon sun', 'Area (ft2)', 'BTU/h', 'Suggested'],
+      ['Aircon zone', 'Rooms', 'Afternoon sun', 'Area (ft2)', 'BTU/h', 'Installed', 'Installed BTU/h', 'Installed enough', 'Suggested'],
       ...zones.map((z) => [
         z.name,
         z.rooms.map((r) => r.room.name).join(' + '),
         z.sunny ? 'yes' : 'no',
         (m2(z.area) * M2_TO_SQFT).toFixed(0),
         Math.round(z.btu),
-        `${z.units.count > 1 ? `${z.units.count} × ` : ''}${z.units.hp}`,
+        installedLabel(z),
+        z.installed.length ? z.installedBtu : '',
+        z.enough == null ? '' : z.enough ? 'yes' : 'no',
+        suggestedLabel(z),
       ]),
     ]
     const csv = rows.map((r) => r.map((c) => `"${String(c).replace(/"/g, '""')}"`).join(',')).join('\n')
@@ -241,7 +246,7 @@ export function Report() {
                   <th className="num">Area</th>
                   <th className="num">Avg ceiling</th>
                   <th className="num">Needed</th>
-                  <th>Suggested unit</th>
+                  <th>Unit</th>
                 </tr>
               </thead>
               <tbody>
@@ -256,11 +261,21 @@ export function Report() {
                     <td className="num">{formatLength(z.volume / z.area)}</td>
                     <td className="num">{fmtInt(z.btu)} BTU/h</td>
                     <td>
-                      <strong>
-                        {z.units.count > 1 ? `${z.units.count} × ` : ''}
-                        {z.units.hp}
-                      </strong>{' '}
-                      <span className="muted">({fmtInt(z.units.btu)} BTU)</span>
+                      {z.enough == null ? (
+                        <>
+                          <strong>{suggestedLabel(z)}</strong> <span className="muted">({fmtInt(z.units.btu)} BTU)</span>
+                          <div className="muted small">suggested</div>
+                        </>
+                      ) : (
+                        <>
+                          <strong>{installedLabel(z)}</strong> <span className="muted">({fmtInt(z.installedBtu)} BTU)</span>{' '}
+                          <span className={`badge ${z.enough ? 'ok' : 'bad'}`}>{z.enough ? 'enough' : 'may be too small'}</span>
+                          <div className="muted small">
+                            installed{z.rooms.length > 1 && ` in ${z.installed.map((u) => u.room).join(', ')}`}
+                            {!z.enough && ` · ${fmtInt(z.btu - z.installedBtu)} BTU/h short; ${suggestedLabel(z)} would cover it`}
+                          </div>
+                        </>
+                      )}
                     </td>
                   </tr>
                 ))}
@@ -273,7 +288,8 @@ export function Report() {
           {formatLength(settings.acRefHeight)}, +{Math.round((settings.acSunnyFactor - 1) * 100)}% for rooms with afternoon sun
           {project.north == null ? ' (set north on the Plan tab to work these out)' : ' (outside walls facing SW, W or NW)'}. Good
           for budgeting and shortlisting; ask the installer to confirm, especially for west-facing glass, top floors or open
-          kitchens. Group open-plan rooms with an aircon zone on the Plan tab.
+          kitchens. Group open-plan rooms with an aircon zone on the Plan tab. A unit that’s already installed counts as
+          enough if the estimate is no more than {Math.round(settings.acShortfall * 100)}% above its rating.
         </p>
       </section>
     </div>

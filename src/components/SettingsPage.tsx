@@ -148,6 +148,13 @@ export function SettingsPage() {
           <Field label="Reference ceiling height" hint="Rooms taller than this need proportionally more.">
             <LengthInput value={s.acRefHeight} unit={s.inputUnit} onChange={(v) => v && updateSettings({ acRefHeight: v })} />
           </Field>
+          <Field label="Allowed shortfall (%)" hint="An installed unit still counts as enough if the estimate is up to this much above its rating.">
+            <input
+              inputMode="decimal"
+              defaultValue={Math.round(s.acShortfall * 100)}
+              onChange={(e) => updateSettings({ acShortfall: num(e.target.value, s.acShortfall * 100) / 100 })}
+            />
+          </Field>
         </div>
       </section>
     </div>

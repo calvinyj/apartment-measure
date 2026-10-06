@@ -1,15 +1,17 @@
 import { isSunny } from './geometry/facing'
 import type { Solved, SolvedRoom } from './geometry/solve'
-import { roomTypeInfo, type Settings } from './types'
+import { roomTypeInfo, type Room, type Settings } from './types'
 import { M2_TO_SQFT } from './units'
 
 /** Common residential split-unit sizes in Malaysia (HP is the retail label). */
 export const AC_SIZES = [
-  { hp: '1.0 HP', btu: 9000 },
-  { hp: '1.5 HP', btu: 12000 },
-  { hp: '2.0 HP', btu: 18000 },
-  { hp: '2.5 HP', btu: 24000 },
+  { hp: 1, btu: 9000 },
+  { hp: 1.5, btu: 12000 },
+  { hp: 2, btu: 18000 },
+  { hp: 2.5, btu: 24000 },
 ]
+
+export const hpLabel = (hp: number) => `${hp.toFixed(1)} HP`
 
 export interface AcZone {
   name: string
@@ -21,11 +23,20 @@ export interface AcZone {
   btu: number
   /** gets the sun margin */
   sunny: boolean
-  units: { hp: string; btu: number; count: number }
+  /** suggested units for the whole zone, ignoring anything installed */
+  units: { hp: number; btu: number; count: number }
+  /** units already in the zone's rooms; empty = nothing installed */
+  installed: { hp: number; btu: number; room: string }[]
+  installedBtu: number
+  /** the installed units cover the need (within the allowed shortfall); null = nothing installed */
+  enough: boolean | null
 }
 
-/** Explicit choice wins; putting a room in a named zone implies it's cooled with that zone. */
-export const needsAc = (r: SolvedRoom) => r.room.ac ?? (r.room.acZone.trim() !== '' || roomTypeInfo(r.room.type).ac)
+const hasInstalled = (room: Room) => room.acInstalled != null
+
+/** Explicit choice wins; an installed unit or a named zone implies the room is cooled. */
+export const needsAc = (r: SolvedRoom) =>
+  r.room.ac ?? (hasInstalled(r.room) || r.room.acZone.trim() !== '' || roomTypeInfo(r.room.type).ac)
 
 /**
  * Rule of thumb: area (ft²) × BTU/ft², scaled by ceiling height against a
@@ -45,7 +56,14 @@ export function acZones(solved: Solved, s: Settings): AcZone[] {
     const avgHeight = area > 0 ? volume / area : s.defaultHeight
     const sunny = rooms.some((r) => isSunny(solved, r))
     const btu = (area / 1e6) * M2_TO_SQFT * s.acBtuPerSqft * (avgHeight / s.acRefHeight) * (sunny ? s.acSunnyFactor : 1)
-    return { name, rooms, area, volume, btu, sunny, units: pickUnits(btu) }
+    // A zone is cooled as one space, so the units in all its rooms add up.
+    const installed = rooms.flatMap((r) => {
+      const size = AC_SIZES.find((x) => x.hp === r.room.acInstalled)
+      return size ? [{ ...size, room: r.room.name }] : []
+    })
+    const installedBtu = installed.reduce((a, u) => a + u.btu, 0)
+    const enough = installed.length ? btu <= installedBtu * (1 + s.acShortfall) : null
+    return { name, rooms, area, volume, btu, sunny, units: pickUnits(btu), installed, installedBtu, enough }
   })
 }
 

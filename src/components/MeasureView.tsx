@@ -7,7 +7,7 @@ import { groupMeasured, groupOf, splitMeasured } from '../geometry/runs'
 import { useStore, type WizardStep } from '../store'
 import { roomTypeInfo, type Edge, type Opening, type OpeningKind, type Room, type Vec2 } from '../types'
 import { formatArea, formatLength, formatSqft } from '../units'
-import { Field, LengthInput, Segmented, useSolved } from './common'
+import { Field, InstalledAcField, LengthInput, Segmented, useSolved } from './common'
 import { CompassBadge } from './Compass'
 import { PlanView, type PointerInfo } from './PlanView'
 import { RoomShapes } from './RoomShapes'
@@ -216,6 +216,10 @@ function RoomStep({ room, s }: { room: Room; s: SolvedRoom }) {
       : !facing.length
         ? 'no, no outside walls'
         : `${facesAfternoonSun(facing) ? 'yes' : 'no'}, faces ${formatFacing(facing)}`
+  const autoAc =
+    room.acInstalled != null
+      ? 'yes, one is installed'
+      : `${roomTypeInfo(room.type).ac ? 'yes' : 'no'} for ${roomTypeInfo(room.type).label.toLowerCase()}`
   return (
     <div className="stack">
       <Progress room={room} s={s} step="room" />
@@ -267,11 +271,12 @@ function RoomStep({ room, s }: { room: Room; s: SolvedRoom }) {
           value={room.ac == null ? 'auto' : room.ac ? 'yes' : 'no'}
           onChange={(e) => updateRoom(room.id, { ac: e.target.value === 'auto' ? null : e.target.value === 'yes' })}
         >
-          <option value="auto">Auto ({roomTypeInfo(room.type).ac ? 'yes' : 'no'} for {roomTypeInfo(room.type).label.toLowerCase()})</option>
+          <option value="auto">Auto ({autoAc})</option>
           <option value="yes">Yes</option>
           <option value="no">No</option>
         </select>
       </Field>
+      <InstalledAcField room={room} />
       <StepNav room={room} s={s} step="room" nextLabel="Start walls" />
     </div>
   )
