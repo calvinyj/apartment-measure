@@ -69,6 +69,8 @@ export interface Solved {
   netIndoorArea: number
   grossArea: number
   grossOutline: MultiPolygon
+  /** where north points on the plan (degrees clockwise from up), if set */
+  north: number | null
 }
 
 export function mmPerPx(p: Project): number | null {
@@ -271,6 +273,7 @@ export function solveProject(project: Project): Solved {
     netIndoorArea: rooms.filter((r) => r.room.type !== 'balcony').reduce((a, r) => a + r.area, 0),
     grossArea: multiPolygonArea(grossOutline),
     grossOutline,
+    north: project.north,
   }
 }
 

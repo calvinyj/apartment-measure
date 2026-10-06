@@ -1,16 +1,21 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
+import { needsAc } from '../ac'
+import { edgeFacing, formatFacing, isAfternoon, isSunny, outdoorCandidates, roomFacing } from '../geometry/facing'
+import { measureGroups } from '../geometry/runs'
+import type { Solved } from '../geometry/solve'
 import { isSelfIntersecting, pointInPolygon, area as polyArea } from '../geometry/polygon'
 import { snapPoint, type Snapped } from '../geometry/snap'
-import { dist, lerp } from '../geometry/vec'
+import { add, dist, lerp, norm, outward, scale, sub } from '../geometry/vec'
 import { useStore } from '../store'
 import { uploadPlanImage } from '../sync'
-import { ROOM_TYPES, type Room, type RoomType, type Vec2 } from '../types'
+import { ROOM_TYPES, roomTypeInfo, type Room, type RoomType, type Vec2 } from '../types'
 import { formatLength } from '../units'
 import { Field, LengthInput, Segmented, useSolved } from './common'
+import { CompassBadge, CompassDial, DegreeInput } from './Compass'
 import { PlanView, type PointerInfo } from './PlanView'
 import { RoomShapes } from './RoomShapes'
 
-type Tool = 'select' | 'trace' | 'calibrate'
+type Tool = 'select' | 'trace' | 'calibrate' | 'north'
 
 const snapRadius = (info: PointerInfo, k: number) => (info.pointerType === 'mouse' ? 10 : 22) / k
 
@@ -18,7 +23,7 @@ export function PlanEditor() {
   const project = useStore((s) => s.project)
   const selectedId = useStore((s) => s.selectedRoomId)
   const select = useStore((s) => s.select)
-  const { addRoom, moveVertex, insertVertex, setCalibration } = useStore.getState()
+  const { addRoom, moveVertex, insertVertex, setCalibration, setNorth } = useStore.getState()
   const solved = useSolved()
 
   const [tool, setTool] = useState<Tool>(project.calibration ? 'select' : 'calibrate')
@@ -28,6 +33,7 @@ export function PlanEditor() {
   const [calibMm, setCalibMm] = useState<number | null>(null)
   const [selVertex, setSelVertex] = useState<number | null>(null)
   const [snapOn, setSnapOn] = useState(true)
+  const [showDial, setShowDial] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const kRef = useRef(1)
   const drag = useRef<{ roomId: string; index: number } | null>(null)
@@ -74,6 +80,18 @@ export function PlanEditor() {
     if (tool === 'calibrate') {
       if (calib.length >= 2) setCalib([raw])
       else setCalib([...calib, calib.length === 1 ? doSnap(raw, calib[0], info, [], undefined).p : raw])
+      return
+    }
+    if (tool === 'north') {
+      // Tapping an outside wall switches it between open air and next unit / corridor.
+      const m = info.handle?.match(/^w:(.+):(\d+)$/)
+      const room = m && project.rooms.find((r) => r.id === m[1])
+      if (!room) return
+      const i = Number(m[2])
+      const openAir = room.edges[i].openAir === false ? undefined : false
+      const group = measureGroups(room).find((g) => g.includes(i)) ?? [i]
+      const s = solved.byId.get(room.id)
+      for (const j of group) if (s?.edgeInfo[j].side === 'external') useStore.getState().updateEdge(room.id, j, { openAir })
       return
     }
     // select tool
@@ -160,7 +178,7 @@ export function PlanEditor() {
 
   if (!image) return <NoImage />
 
-  const cursor = tool === 'select' ? 'default' : 'crosshair'
+  const cursor = tool === 'select' ? 'default' : tool === 'north' ? 'grab' : 'crosshair'
 
   return (
     <div className="split">
@@ -184,6 +202,7 @@ export function PlanEditor() {
                 {tool === 'select' && selected && <VertexHandles room={selected} k={k} selVertex={selVertex} />}
                 {tool === 'trace' && <TraceOverlay points={trace} hover={hover} k={k} image={image} />}
                 {tool === 'calibrate' && <CalibOverlay points={calib} hover={hover} k={k} mm={calibMm} />}
+                {tool === 'north' && <OutsideWalls solved={solved} k={k} />}
               </>
             )
           }}
@@ -196,12 +215,24 @@ export function PlanEditor() {
               { value: 'select', label: 'Select' },
               { value: 'trace', label: 'Draw room' },
               { value: 'calibrate', label: 'Set scale' },
+              { value: 'north', label: 'North' },
             ]}
           />
-          <label className="check small">
-            <input type="checkbox" checked={snapOn} onChange={(e) => setSnapOn(e.target.checked)} /> Snap
-          </label>
+          {tool === 'north' ? (
+            <label className="check small">
+              <input type="checkbox" checked={showDial} onChange={(e) => setShowDial(e.target.checked)} /> Dial
+            </label>
+          ) : (
+            <label className="check small">
+              <input type="checkbox" checked={snapOn} onChange={(e) => setSnapOn(e.target.checked)} /> Snap
+            </label>
+          )}
         </div>
+        {tool === 'north' && showDial ? (
+          <CompassDial value={project.north} onChange={setNorth} />
+        ) : (
+          <CompassBadge north={project.north} onClick={() => (tool === 'north' ? setShowDial(true) : switchTool('north'))} />
+        )}
       </div>
 
       <aside className="panel">
@@ -223,6 +254,7 @@ export function PlanEditor() {
             }}
           />
         )}
+        {tool === 'north' && <NorthPanel onDone={() => switchTool('select')} />}
         {tool === 'trace' && (
           <TracePanel
             count={trace.length}
@@ -311,6 +343,13 @@ function PlanOverview({ onTool }: { onTool: (t: Tool) => void }) {
             Draw room
           </button>
         </li>
+        <li className={project.north != null ? 'done' : 'todo'}>
+          <strong>Set north</strong>
+          <span> · {project.north != null ? `${Math.round(project.north)}° from the top of the plan` : 'optional, for sun and aircon'}</span>
+          <button className="link" onClick={() => onTool('north')}>
+            {project.north != null ? 'Change' : 'Set'}
+          </button>
+        </li>
         <li className="todo">
           <strong>Measure on site</strong>
           <button className="link" onClick={() => setTab('measure')} disabled={!project.rooms.length || !project.calibration}>
@@ -376,6 +415,123 @@ function CalibratePanel({
         </>
       )}
     </div>
+  )
+}
+
+const QUICK_NORTH = [
+  { deg: 0, label: '↑ Up' },
+  { deg: 90, label: '→ Right' },
+  { deg: 180, label: '↓ Down' },
+  { deg: 270, label: '← Left' },
+]
+
+function NorthPanel({ onDone }: { onDone: () => void }) {
+  const north = useStore((s) => s.project.north)
+  const setNorth = useStore((s) => s.setNorth)
+  const solved = useSolved()
+  const facing = solved.rooms
+    .map((r) => ({ r, f: roomFacing(solved, r) }))
+    .filter(({ r, f }) => f.length && !roomTypeInfo(r.room.type).outdoor)
+  const ruledOut = solved.rooms.reduce((n, r) => n + r.room.edges.filter((e) => e.openAir === false).length, 0)
+  return (
+    <div className="stack">
+      <h2>Set north</h2>
+      <p>
+        Turn the ring until the red needle points the same way as the <strong>north arrow</strong> printed on the plan. Drag the
+        plan to bring its arrow into the middle of the dial.
+      </p>
+      <p className="muted small">
+        No arrow on the plan? Find the building on Google Maps (north is up there), see which way the balcony or main windows
+        face, and turn the dial to match.
+      </p>
+      <Field label="North points" hint="Degrees clockwise from the top of the plan.">
+        <div className="row">
+          <DegreeInput value={north} onChange={setNorth} />
+          <span className="muted">°</span>
+        </div>
+      </Field>
+      <div className="row wrap">
+        {QUICK_NORTH.map((q) => (
+          <button key={q.deg} className={`btn small${north === q.deg ? ' primary' : ''}`} onClick={() => setNorth(q.deg)}>
+            {q.label}
+          </button>
+        ))}
+      </div>
+      {north != null && facing.length > 0 && (
+        <>
+          <h3>Which way rooms look out</h3>
+          <ul className="facing-list">
+            {facing.map(({ r, f }) => (
+              <li key={r.room.id}>
+                <span>{r.room.name}</span>
+                <span className="muted">
+                  {formatFacing(f)}
+                  {/* Only rooms with aircon use the sun margin. */}
+                  {needsAc(r) &&
+                    (r.room.sunny == null
+                      ? isSunny(solved, r) && ' · afternoon sun'
+                      : ` · ${r.room.sunny ? 'afternoon sun' : 'no sun'} (your choice)`)}
+                </span>
+              </li>
+            ))}
+          </ul>
+          <p className="small">
+            On the plan, <span className="key sun">orange</span> outside walls face the afternoon sun (SW, W or NW) and{' '}
+            <span className="key">blue</span> ones face other ways. The plan can’t tell open air from the next unit, so{' '}
+            <strong>tap any wall that’s really against the next unit, a lift lobby or a corridor</strong> to rule it out
+            {ruledOut > 0 ? ` (${ruledOut} ruled out so far)` : ''}. Untick Dial if it’s in the way.
+          </p>
+          <p className="muted small">Rooms with aircon and an orange wall get the sun margin.</p>
+        </>
+      )}
+      <div className="row">
+        <button className="btn primary" onClick={onDone}>
+          Done
+        </button>
+        <button className="btn" disabled={north == null} onClick={() => setNorth(null)}>
+          Clear
+        </button>
+      </div>
+    </div>
+  )
+}
+
+/** Outside walls coloured by which way they face; tap targets for ruling a wall out. */
+function OutsideWalls({ solved, k }: { solved: Solved; k: number }) {
+  const north = solved.north
+  return (
+    <g>
+      {solved.rooms.flatMap((r) => {
+        const pts = r.room.points
+        return outdoorCandidates(solved, r).map((i) => {
+          const a = pts[i]
+          const b = pts[(i + 1) % pts.length]
+          const ruledOut = r.room.edges[i].openAir === false
+          const point = north == null ? null : edgeFacing(r, i, north)
+          const label = add(lerp(a, b, 0.5), scale(outward(norm(sub(b, a))), 14 / k))
+          // Walls onto a balcony and open sides really are outdoors; only outside walls can be ruled out.
+          const tappable = r.edgeInfo[i].side === 'external'
+          return (
+            <g key={`${r.room.id}:${i}`} data-handle={tappable ? `w:${r.room.id}:${i}` : undefined} className={tappable ? 'tap' : undefined}>
+              <line x1={a.x} y1={a.y} x2={b.x} y2={b.y} className="outside-hit" vectorEffect="non-scaling-stroke" />
+              <line
+                x1={a.x}
+                y1={a.y}
+                x2={b.x}
+                y2={b.y}
+                className={`outside-wall${ruledOut ? ' ruled-out' : point && isAfternoon(point) ? ' sun' : ''}`}
+                vectorEffect="non-scaling-stroke"
+              />
+              {point && !ruledOut && (
+                <text x={label.x} y={label.y} fontSize={11 / k} className="outside-label">
+                  {point}
+                </text>
+              )}
+            </g>
+          )
+        })
+      })}
+    </g>
   )
 }
 

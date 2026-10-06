@@ -9,6 +9,7 @@ import { useStore } from '../store'
 import { roomTypeInfo, type Vec2 } from '../types'
 import { formatArea } from '../units'
 import { useSolved } from './common'
+import { CompassBadge } from './Compass'
 
 const M = 1 / 1000 // scene units are metres
 
@@ -109,6 +110,23 @@ function PlanUnderlay({ image, mmPerPx }: { image: { src: string; width: number;
   )
 }
 
+/** Turns the corner compass so its needle follows north on screen as the camera orbits. */
+function CompassTracker({ north, fallback, needle }: { north: number; fallback: THREE.Vector3; needle: RefObject<SVGGElement | null> }) {
+  const a = useMemo(() => new THREE.Vector3(), [])
+  const b = useMemo(() => new THREE.Vector3(), [])
+  useFrame(({ camera, size, controls }) => {
+    if (!needle.current) return
+    const target = (controls as unknown as { target?: THREE.Vector3 } | null)?.target ?? fallback
+    const t = (north * Math.PI) / 180
+    // Plan north (sin t, -cos t) lies along scene (sin t, 0, -cos t).
+    a.copy(target).project(camera)
+    b.set(target.x + Math.sin(t), target.y, target.z - Math.cos(t)).project(camera)
+    const deg = (Math.atan2((b.x - a.x) * size.width, (b.y - a.y) * size.height) * 180) / Math.PI
+    needle.current.setAttribute('transform', `rotate(${deg})`)
+  })
+  return null
+}
+
 function CameraRig({ center, size, resetKey }: { center: THREE.Vector3; size: number; resetKey: number }) {
   const camera = useThree((s) => s.camera)
   const controls = useThree((s) => s.controls) as unknown as { target: THREE.Vector3; update: () => void } | null
@@ -134,6 +152,7 @@ export function Viewer3D() {
   const [underlay, setUnderlay] = useState(true)
   const [resetKey, setResetKey] = useState(0)
   const labelLayer = useRef<HTMLDivElement>(null)
+  const needle = useRef<SVGGElement>(null)
   const anchors = useMemo(
     () =>
       solved.rooms.map((r) => {
@@ -189,6 +208,7 @@ export function Viewer3D() {
           <RoomMesh key={r.room.id} solved={solved} r={r} cutaway={cutaway} />
         ))}
         {labels && <LabelProjector anchors={anchors} layer={labelLayer} />}
+        {project.north != null && <CompassTracker north={project.north} fallback={center} needle={needle} />}
         <OrbitControls makeDefault maxPolarAngle={Math.PI / 2 - 0.05} />
         <CameraRig center={center} size={size} resetKey={resetKey} />
       </Canvas>
@@ -202,6 +222,7 @@ export function Viewer3D() {
           ))}
         </div>
       )}
+      {project.north != null && <CompassBadge north={project.north} needle={needle} />}
       <div className="viewer-toolbar">
         <label className="check small">
           <input type="checkbox" checked={cutaway} onChange={(e) => setCutaway(e.target.checked)} /> Cut walls at 1.2 m

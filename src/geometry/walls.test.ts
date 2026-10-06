@@ -6,7 +6,7 @@ import { roomWallPieces } from './walls'
 
 function room(id: string, pts: [number, number][]): Room {
   const edges: Edge[] = pts.map((_, i) => ({ id: `${id}-${i}`, kind: 'wall', measured: null, thickness: null, side: 'auto', openings: [] }))
-  return { id, name: id, type: 'bedroom', points: pts.map(([x, y]) => ({ x, y })), edges, height: 2700, acZone: '', ac: null, sunny: false }
+  return { id, name: id, type: 'bedroom', points: pts.map(([x, y]) => ({ x, y })), edges, height: 2700, acZone: '', ac: null, sunny: null }
 }
 
 describe('roomWallPieces', () => {
@@ -16,7 +16,8 @@ describe('roomWallPieces', () => {
   // Door drawn only on room A's side of the shared wall (edge 1), 1 m from its start.
   a.edges[1].openings = [{ id: 'd', kind: 'door', offset: 1000, width: 900, height: 2100, sill: 0 }]
   const project: Project = {
-    version: 2,
+    version: 3,
+    north: null,
     name: 't',
     image: null,
     calibration: { a: { x: 0, y: 0 }, b: { x: 100, y: 0 }, mm: 1000 },
@@ -69,7 +70,8 @@ describe('a side that is partly open and partly wall', () => {
   const r = room('bal', [[0, 0], [390, 0], [515, 0], [515, 150], [0, 150]])
   r.edges[0].kind = 'open'
   const project: Project = {
-    version: 2,
+    version: 3,
+    north: null,
     name: 't',
     image: null,
     calibration: { a: { x: 0, y: 0 }, b: { x: 100, y: 0 }, mm: 1000 },

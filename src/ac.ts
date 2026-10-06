@@ -1,3 +1,4 @@
+import { isSunny } from './geometry/facing'
 import type { Solved, SolvedRoom } from './geometry/solve'
 import { roomTypeInfo, type Settings } from './types'
 import { M2_TO_SQFT } from './units'
@@ -18,6 +19,8 @@ export interface AcZone {
   /** mm³ */
   volume: number
   btu: number
+  /** gets the sun margin */
+  sunny: boolean
   units: { hp: string; btu: number; count: number }
 }
 
@@ -40,9 +43,9 @@ export function acZones(solved: Solved, s: Settings): AcZone[] {
     const area = rooms.reduce((a, r) => a + r.area, 0)
     const volume = rooms.reduce((a, r) => a + r.area * r.height, 0)
     const avgHeight = area > 0 ? volume / area : s.defaultHeight
-    const sunny = rooms.some((r) => r.room.sunny)
+    const sunny = rooms.some((r) => isSunny(solved, r))
     const btu = (area / 1e6) * M2_TO_SQFT * s.acBtuPerSqft * (avgHeight / s.acRefHeight) * (sunny ? s.acSunnyFactor : 1)
-    return { name, rooms, area, volume, btu, units: pickUnits(btu) }
+    return { name, rooms, area, volume, btu, sunny, units: pickUnits(btu) }
   })
 }
 

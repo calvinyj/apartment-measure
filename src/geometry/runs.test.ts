@@ -12,7 +12,7 @@ function room(pts: [number, number][], open: number[] = []): Room {
     side: 'auto',
     openings: [],
   }))
-  return { id: 'r', name: 'r', type: 'bedroom', points: pts.map(([x, y]) => ({ x, y })), edges, height: null, acZone: '', ac: null, sunny: false }
+  return { id: 'r', name: 'r', type: 'bedroom', points: pts.map(([x, y]) => ({ x, y })), edges, height: null, acZone: '', ac: null, sunny: null }
 }
 
 describe('measureGroups', () => {
@@ -54,7 +54,8 @@ describe('a straight wall facing different neighbours along its length', () => {
   const b = room([[0, -150], [100, -150], [100, 0], [0, 0]])
   b.id = 'b'
   const project: Project = {
-    version: 2,
+    version: 3,
+    north: null,
     name: 't',
     image: null,
     calibration: { a: { x: 0, y: 0 }, b: { x: 100, y: 0 }, mm: 1000 },

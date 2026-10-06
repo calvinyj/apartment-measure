@@ -91,14 +91,15 @@ function room(id: string, pts: [number, number][], measured: (number | null)[]):
     height: null,
     acZone: '',
     ac: null,
-    sunny: false,
+    sunny: null,
   }
 }
 
 describe('solveProject', () => {
   // Two 3×3 m rooms side by side, drawn at 1 px = 10 mm with a 15 px (150 mm) wall between.
   const project: Project = {
-    version: 2,
+    version: 3,
+    north: null,
     name: 't',
     image: null,
     calibration: { a: { x: 0, y: 0 }, b: { x: 100, y: 0 }, mm: 1000 },
@@ -133,7 +134,8 @@ describe('solveProject', () => {
 describe('rooms traced on wall centre lines', () => {
   // Two 3 m squares sharing the line x = 3000 mm, as if tracing down the middle of each wall.
   const project: Project = {
-    version: 2,
+    version: 3,
+    north: null,
     name: 'c',
     image: null,
     calibration: { a: { x: 0, y: 0 }, b: { x: 100, y: 0 }, mm: 1000 },

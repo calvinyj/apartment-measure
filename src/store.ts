@@ -19,13 +19,14 @@ export const uid = () =>
 export const newEdge = (): Edge => ({ id: uid(), kind: 'wall', measured: null, thickness: null, side: 'auto', openings: [] })
 
 export const emptyProject = (name = 'My apartment'): Project => ({
-  version: 2,
+  version: 3,
   name,
   image: null,
   calibration: null,
   rooms: [],
   settings: { ...DEFAULT_SETTINGS },
   advertised: null,
+  north: null,
 })
 
 /** Accepts current and older saved/exported shapes. */
@@ -33,10 +34,14 @@ export function normalizeProject(raw: unknown): Project {
   const p = raw as Partial<Project> & { image?: { src?: string; dataUrl?: string; width: number; height: number } | null }
   if (!p || typeof p !== 'object' || !Array.isArray(p.rooms)) throw new Error('Not an apartment-measure layout')
   const img = p.image
+  // Before v3, "sunny" was a plain checkbox; an unticked one now means "work it out from the compass".
+  const rooms = ((p.version as number | undefined) ?? 1) < 3 ? p.rooms.map((r) => ({ ...r, sunny: r.sunny ? true : null })) : p.rooms
   return {
     ...emptyProject(),
     ...p,
-    version: 2,
+    version: 3,
+    rooms,
+    north: typeof p.north === 'number' ? p.north : null,
     image: img ? { src: img.src ?? img.dataUrl ?? '', width: img.width, height: img.height } : null,
     settings: { ...DEFAULT_SETTINGS, ...p.settings },
   }
@@ -70,6 +75,7 @@ interface State {
   setCalibration: (c: Calibration | null) => void
   updateSettings: (patch: Partial<Settings>) => void
   setAdvertised: (a: Project['advertised']) => void
+  setNorth: (deg: number | null) => void
 
   addRoom: (points: Vec2[], type?: RoomType) => string
   updateRoom: (id: string, patch: Partial<Room>) => void
@@ -119,6 +125,7 @@ export const useStore = create<State>((set, get) => {
     setCalibration: (calibration) => edit((p) => ({ ...p, calibration })),
     updateSettings: (patch) => edit((p) => ({ ...p, settings: { ...p.settings, ...patch } })),
     setAdvertised: (advertised) => edit((p) => ({ ...p, advertised })),
+    setNorth: (north) => edit((p) => ({ ...p, north })),
 
     addRoom: (points, type = 'bedroom') => {
       const pts = signedArea(points) < 0 ? [...points].reverse() : points
@@ -133,7 +140,7 @@ export const useStore = create<State>((set, get) => {
         height: null,
         acZone: '',
         ac: null,
-        sunny: false,
+        sunny: null,
       }
       edit((p) => ({ ...p, rooms: [...p.rooms, room] }))
       return id
@@ -156,7 +163,7 @@ export const useStore = create<State>((set, get) => {
           const points = [...r.points]
           points.splice(edgeIndex + 1, 0, pt)
           const edges = [...r.edges]
-          edges.splice(edgeIndex, 1, { ...old, measured: null }, { ...newEdge(), kind: old.kind, thickness: old.thickness, side: old.side })
+          edges.splice(edgeIndex, 1, { ...old, measured: null }, { ...newEdge(), kind: old.kind, thickness: old.thickness, side: old.side, openAir: old.openAir })
           return { ...r, points, edges }
         }),
       ),

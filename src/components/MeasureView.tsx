@@ -1,4 +1,5 @@
 import { useRef } from 'react'
+import { edgeFacing, facesAfternoonSun, formatFacing, outdoorEdges, roomFacing } from '../geometry/facing'
 import { bbox, centroid, pointInPolygon } from '../geometry/polygon'
 import type { SolvedRoom } from '../geometry/solve'
 import { add, dist, dot, lerp, norm, outward, scale, sub } from '../geometry/vec'
@@ -7,6 +8,7 @@ import { useStore, type WizardStep } from '../store'
 import { roomTypeInfo, type Edge, type Opening, type OpeningKind, type Room, type Vec2 } from '../types'
 import { formatArea, formatLength, formatSqft } from '../units'
 import { Field, LengthInput, Segmented, useSolved } from './common'
+import { CompassBadge } from './Compass'
 import { PlanView, type PointerInfo } from './PlanView'
 import { RoomShapes } from './RoomShapes'
 
@@ -90,6 +92,7 @@ export function MeasureView() {
             )
           }}
         </PlanView>
+        {project.north != null && <CompassBadge north={project.north} />}
       </div>
       <aside className="panel">
         {!room || !s ? (
@@ -204,6 +207,15 @@ function RoomStep({ room, s }: { room: Room; s: SolvedRoom }) {
   const settings = useStore((st) => st.project.settings)
   const updateRoom = useStore((st) => st.updateRoom)
   const setWizard = useStore((st) => st.setWizard)
+  const setTab = useStore((st) => st.setTab)
+  const solved = useSolved()
+  const facing = roomFacing(solved, s)
+  const autoSun =
+    solved.north == null
+      ? 'no, north isn’t set'
+      : !facing.length
+        ? 'no, no outside walls'
+        : `${facesAfternoonSun(facing) ? 'yes' : 'no'}, faces ${formatFacing(facing)}`
   return (
     <div className="stack">
       <Progress room={room} s={s} step="room" />
@@ -224,10 +236,32 @@ function RoomStep({ room, s }: { room: Room; s: SolvedRoom }) {
           autoFocus
         />
       </Field>
-      <label className="check">
-        <input type="checkbox" checked={room.sunny} onChange={(e) => updateRoom(room.id, { sunny: e.target.checked })} />
-        Gets strong afternoon sun / west-facing (adds aircon margin)
-      </label>
+      <Field
+        label="Afternoon sun"
+        hint={
+          <>
+            Sun through west-facing windows adds {Math.round((settings.acSunnyFactor - 1) * 100)}% to the aircon size.
+            {solved.north == null && (
+              <>
+                {' '}
+                <button className="link" onClick={() => setTab('plan')}>
+                  Set north
+                </button>{' '}
+                on the Plan tab to work it out.
+              </>
+            )}
+          </>
+        }
+      >
+        <select
+          value={room.sunny == null ? 'auto' : room.sunny ? 'yes' : 'no'}
+          onChange={(e) => updateRoom(room.id, { sunny: e.target.value === 'auto' ? null : e.target.value === 'yes' })}
+        >
+          <option value="auto">Auto ({autoSun})</option>
+          <option value="yes">Yes</option>
+          <option value="no">No</option>
+        </select>
+      </Field>
       <Field label="Needs aircon">
         <select
           value={room.ac == null ? 'auto' : room.ac ? 'yes' : 'no'}
@@ -249,11 +283,13 @@ function WallStep({ room, s, group }: { room: Room; s: SolvedRoom; group: number
   const settings = useStore((st) => st.project.settings)
   const rooms = useStore((st) => st.project.rooms)
   const { updateEdge, addOpening, updateOpening, removeOpening, setWizard } = useStore.getState()
+  const solved = useSolved()
   const first = group[0]
   const edge = room.edges[first]
   // Show thickness/side from the longest part; changes apply to the whole wall.
   const main = group.reduce((a, b) => (s.estimates[b] > s.estimates[a] ? b : a))
   const info = s.edgeInfo[main]
+  const facing = solved.north != null && outdoorEdges(solved, s).includes(main) ? edgeFacing(s, main, solved.north) : null
   const estimate = sum(group.map((i) => s.estimates[i]))
   const measured = groupMeasured(room, group)
   const unit = settings.inputUnit
@@ -290,6 +326,7 @@ function WallStep({ room, s, group }: { room: Room; s: SolvedRoom; group: number
       <p className="muted small">
         From corner <strong className="tag-a">A</strong> to <strong className="tag-b">B</strong> (highlighted on the plan)
         {neighbourNames.length ? ` · shared with ${neighbourNames.join(', ')}` : ''}
+        {facing ? ` · looks out ${facing}` : ''}
       </p>
       {group.length > 1 && (
         <p className="callout small">
@@ -325,7 +362,7 @@ function WallStep({ room, s, group }: { room: Room; s: SolvedRoom; group: number
       )}
 
       {edge.kind === 'wall' && (
-        <details className="more" open={edge.thickness != null || edge.side !== 'auto'}>
+        <details className="more" open={edge.thickness != null || edge.side !== 'auto' || edge.openAir === false}>
           <summary>
             Wall thickness: {formatLength(info.thickness, unit)} · {info.side}
             {edge.thickness == null ? ' (default)' : ''}
@@ -352,6 +389,18 @@ function WallStep({ room, s, group }: { room: Room; s: SolvedRoom; group: number
               ]}
             />
           </Field>
+          {info.side === 'external' && (
+            <Field label="Beyond the wall" hint="Only open air lets the sun in, which adds to the aircon size.">
+              <Segmented
+                value={edge.openAir === false ? 'enclosed' : 'open'}
+                onChange={(v) => forAll({ openAir: v === 'open' ? undefined : false })}
+                options={[
+                  { value: 'open', label: 'Open air' },
+                  { value: 'enclosed', label: 'Next unit / corridor' },
+                ]}
+              />
+            </Field>
+          )}
         </details>
       )}
 

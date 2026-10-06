@@ -57,6 +57,8 @@ export interface Edge {
   /** wall thickness override in mm; null = use default */
   thickness: number | null
   side: WallSide
+  /** false = beyond this outside wall is the next unit, a lobby or a corridor, not open air (so no sun) */
+  openAir?: boolean
   openings: Opening[]
 }
 
@@ -74,7 +76,8 @@ export interface Room {
   acZone: string
   /** override whether this room needs aircon; null = by room type */
   ac: boolean | null
-  sunny: boolean
+  /** gets strong afternoon sun (adds aircon margin); null = work it out from which way the room faces */
+  sunny: boolean | null
 }
 
 export interface Calibration {
@@ -124,11 +127,13 @@ export interface PlanImage {
 }
 
 export interface Project {
-  version: 2
+  version: 3
   name: string
   image: PlanImage | null
   calibration: Calibration | null
   rooms: Room[]
   settings: Settings
   advertised: { value: number; unit: 'sqft' | 'm2' } | null
+  /** where north points on the plan, in degrees clockwise from the top of the image; null = not set */
+  north: number | null
 }

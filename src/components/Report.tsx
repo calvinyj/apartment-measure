@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { acZones } from '../ac'
+import { formatFacing, roomFacing } from '../geometry/facing'
 import { downloadFile, useStore } from '../store'
 import { roomTypeInfo } from '../types'
 import { formatArea, formatLength, formatSqft, fmtInt, M2_TO_SQFT, m2 } from '../units'
@@ -34,10 +35,11 @@ export function Report() {
 
   const exportCsv = () => {
     const rows = [
-      ['Room', 'Type', 'Net area (m2)', 'Net area (ft2)', 'Ceiling (mm)', 'Volume (m3)', 'Walls measured', 'Closure error (mm)'],
+      ['Room', 'Type', 'Faces', 'Net area (m2)', 'Net area (ft2)', 'Ceiling (mm)', 'Volume (m3)', 'Walls measured', 'Closure error (mm)'],
       ...solved.rooms.map((r) => [
         r.room.name,
         roomTypeInfo(r.room.type).label,
+        formatFacing(roomFacing(solved, r)),
         m2(r.area).toFixed(2),
         (m2(r.area) * M2_TO_SQFT).toFixed(1),
         Math.round(r.height),
@@ -46,13 +48,14 @@ export function Report() {
         r.status === 'empty' ? '' : Math.round(r.closure.measuredError),
       ]),
       [],
-      ['Total net', '', m2(solved.netArea).toFixed(2), (m2(solved.netArea) * M2_TO_SQFT).toFixed(1)],
-      ['Estimated built-up (incl. walls)', '', m2(solved.grossArea).toFixed(2), (m2(solved.grossArea) * M2_TO_SQFT).toFixed(1)],
+      ['Total net', '', '', m2(solved.netArea).toFixed(2), (m2(solved.netArea) * M2_TO_SQFT).toFixed(1)],
+      ['Estimated built-up (incl. walls)', '', '', m2(solved.grossArea).toFixed(2), (m2(solved.grossArea) * M2_TO_SQFT).toFixed(1)],
       [],
-      ['Aircon zone', 'Rooms', 'Area (ft2)', 'BTU/h', 'Suggested'],
+      ['Aircon zone', 'Rooms', 'Afternoon sun', 'Area (ft2)', 'BTU/h', 'Suggested'],
       ...zones.map((z) => [
         z.name,
         z.rooms.map((r) => r.room.name).join(' + '),
+        z.sunny ? 'yes' : 'no',
         (m2(z.area) * M2_TO_SQFT).toFixed(0),
         Math.round(z.btu),
         `${z.units.count > 1 ? `${z.units.count} × ` : ''}${z.units.hp}`,
@@ -186,11 +189,13 @@ export function Report() {
                   0,
                 )
                 const paint = r.wallLength * r.height - openings
+                const facing = roomFacing(solved, r)
                 return (
                   <tr key={r.room.id}>
                     <td>
                       <span className="swatch" style={{ background: roomTypeInfo(r.room.type).color }} />
                       {r.room.name}
+                      {facing.length > 0 && <div className="muted small">faces {formatFacing(facing)}</div>}
                     </td>
                     <td className="num">{m2(r.area).toFixed(2)}</td>
                     <td className="num">{Math.round(m2(r.area) * M2_TO_SQFT)}</td>
@@ -245,7 +250,7 @@ export function Report() {
                     <td>
                       {z.name}
                       {z.rooms.length > 1 && <div className="muted small">{z.rooms.map((r) => r.room.name).join(' + ')}</div>}
-                      {z.rooms.some((r) => r.room.sunny) && <div className="muted small">sun-exposed</div>}
+                      {z.sunny && <div className="muted small">afternoon sun</div>}
                     </td>
                     <td className="num">{Math.round(m2(z.area) * M2_TO_SQFT)} ft²</td>
                     <td className="num">{formatLength(z.volume / z.area)}</td>
@@ -265,7 +270,8 @@ export function Report() {
         )}
         <p className="muted small">
           Rule of thumb: {settings.acBtuPerSqft} BTU/h per ft², scaled for ceilings above/below{' '}
-          {formatLength(settings.acRefHeight)}, +{Math.round((settings.acSunnyFactor - 1) * 100)}% for sun-exposed rooms. Good
+          {formatLength(settings.acRefHeight)}, +{Math.round((settings.acSunnyFactor - 1) * 100)}% for rooms with afternoon sun
+          {project.north == null ? ' (set north on the Plan tab to work these out)' : ' (outside walls facing SW, W or NW)'}. Good
           for budgeting and shortlisting; ask the installer to confirm, especially for west-facing glass, top floors or open
           kitchens. Group open-plan rooms with an aircon zone on the Plan tab.
         </p>
