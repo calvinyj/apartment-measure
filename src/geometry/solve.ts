@@ -120,6 +120,49 @@ function findNeighbors(rooms: { room: Room; planMm: Vec2[] }[]): Map<string, Nei
   return out
 }
 
+/** How far off one straight line two traced walls can be and still count as one wall. */
+const FLUSH_TOL = 30
+/** A straight wall is a given while wall thicknesses are often guesses, so thickness gives way first. */
+const FLUSH_WEIGHT = 10
+
+/**
+ * Walls of different rooms that continue one straight line on the plan, end to end
+ * or with just a cross wall between them (an outside wall running past living and
+ * dining, say). Nothing else ties those rooms along the line.
+ */
+function findFlush(rooms: { room: Room; planMm: Vec2[] }[]) {
+  const out: { a: number; edgeA: number; b: number; edgeB: number; weight: number }[] = []
+  rooms.forEach((A, ai) => {
+    const n = A.planMm.length
+    for (let i = 0; i < n; i++) {
+      if (A.room.edges[i].kind !== 'wall') continue
+      const p = A.planMm[i]
+      const L = dist(p, A.planMm[(i + 1) % n])
+      if (L < 1) continue
+      const d = norm(sub(A.planMm[(i + 1) % n], p))
+      const nrm = outward(d)
+      rooms.forEach((B, bi) => {
+        if (bi <= ai) return
+        const m = B.planMm.length
+        for (let j = 0; j < m; j++) {
+          if (B.room.edges[j].kind !== 'wall') continue
+          const r = B.planMm[j]
+          const s = B.planMm[(j + 1) % m]
+          const M = dist(r, s)
+          if (M < 1 || dot(d, norm(sub(s, r))) < PARALLEL) continue
+          if (Math.abs(dot(sub(r, p), nrm)) > FLUSH_TOL || Math.abs(dot(sub(s, p), nrm)) > FLUSH_TOL) continue
+          const tr = dot(sub(r, p), d)
+          const ts = dot(sub(s, p), d)
+          const apart = Math.max(Math.min(tr, ts) - L, -Math.max(tr, ts))
+          if (apart > MAX_GAP) continue
+          out.push({ a: ai, edgeA: i, b: bi, edgeB: j, weight: (FLUSH_WEIGHT * Math.min(L, M)) / 1000 })
+        }
+      })
+    }
+  })
+  return out
+}
+
 function coverage(neighbors: Neighbor[], L: number): number {
   const iv = neighbors.map((nb) => [nb.from, nb.to]).sort((a, b) => a[0] - b[0])
   let covered = 0
@@ -229,6 +272,12 @@ export function solveProject(project: Project): Solved {
       }
     })
   })
+  // A straight wall shared along its length by several rooms stays straight (faces as offset as on the plan).
+  for (const f of findFlush(traced)) {
+    const A = partial[f.a]
+    const normal = outward(A.dirs[f.edgeA])
+    links.push({ ...f, normal, gap: dot(sub(partial[f.b].planStarts[f.edgeB], A.planStarts[f.edgeA]), normal) })
+  }
   const shifts = layoutRooms(
     partial.map((r) => ({
       walk: r.walkStarts,
