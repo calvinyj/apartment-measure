@@ -7,6 +7,12 @@ export interface WallPiece {
   footprint: Vec2[]
   y0: number
   y1: number
+  /** the room edge this piece is part of */
+  edge: number
+  /** per side (footprint[i] → footprint[i + 1]): lies on the wall's outer face, away from the room */
+  outer: boolean[]
+  /** the top is the wall's full (or cut-away) height, not the sill under an opening */
+  fullHeight: boolean
 }
 
 interface Cut {
@@ -117,6 +123,7 @@ export function roomWallPieces(solved: Solved, r: SolvedRoom, displayHeight: num
     const o0 = meets(kPrev, k) ? (lineIntersect(prev.p, prev.d, cur.p, cur.d) ?? square0) : square0
     const o1 = meets(k, kNext) ? (lineIntersect(cur.p, cur.d, next.p, next.d) ?? square1) : square1
     const quad = [p0, p1, o1, o0]
+    const onOuter = (q: Vec2) => Math.abs(dot(sub(q, p0), outward(d)) - w[k]) < 0.5
 
     const L = dot(sub(p1, p0), d)
     const us = quad.map((q) => dot(sub(q, p0), d))
@@ -135,7 +142,8 @@ export function roomWallPieces(solved: Solved, r: SolvedRoom, displayHeight: num
       const footprint = clipSlab(quad, p0, d, lo, hi)
       if (footprint.length < 3 || polyArea(footprint) < 1) continue
       const active = cuts.filter((c) => c.from <= mid && c.to >= mid)
-      for (const [y0, y1] of solidRanges(active, top)) pieces.push({ footprint, y0, y1 })
+      const outer = footprint.map((q, j) => onOuter(q) && onOuter(footprint[(j + 1) % footprint.length]))
+      for (const [y0, y1] of solidRanges(active, top)) pieces.push({ footprint, y0, y1, edge: k, outer, fullHeight: y1 >= top })
     }
   }
   return pieces

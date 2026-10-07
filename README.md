@@ -49,7 +49,7 @@ Set `ACCESS_KEY` whenever the server can be reached from the internet.
    - For each room, enter the ceiling height, then go wall by wall from corner A to corner B. The plan's estimate is shown, and a reading more than 8% (or 150 mm) off it is flagged.
    - You can skip a wall you can't reach. It is worked out from the other walls.
    - Optionally enter the wall thickness (measure it at a door frame) and the doors and windows on each wall.
-3. **3D**: orbit around the model, cut the walls at 1.2 m to see the layout, and show the plan underneath.
+3. **3D**: orbit around the model, cut the walls at 1.2 m to see the layout, and show the plan underneath. Inside walls are drawn in the paint colour set in **Settings → Paint** (a hex code such as `#c8d8c0`). To give one wall a different colour, open **Paint** on that wall's Measure step. The outside of the unit stays off-white.
 4. **Report**: net area, estimated built-up area, a comparison with the advertised area, a per-room table, aircon sizing, and a CSV export.
 
 ## How the numbers are worked out

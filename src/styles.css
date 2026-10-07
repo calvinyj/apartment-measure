@@ -550,6 +550,12 @@ button.compass-badge {
   pointer-events: auto;
 }
 
+.viewer-toolbar .compass-badge {
+  position: static;
+  width: 40px;
+  height: 40px;
+}
+
 .canvas-toolbar .check,
 .viewer-toolbar .check {
   background: var(--surface);
@@ -689,6 +695,37 @@ button.compass-badge {
 
 .len-input.bad input {
   outline: 2px solid var(--danger);
+}
+
+.color-input {
+  display: flex;
+  gap: 8px;
+}
+
+.color-input input {
+  font-variant-numeric: tabular-nums;
+  font-size: 1.05rem;
+}
+
+.color-input input[type='color'] {
+  order: -1;
+  flex: none;
+  width: 52px;
+  padding: 3px;
+  cursor: pointer;
+}
+
+.color-input.bad input:not([type='color']) {
+  outline: 2px solid var(--danger);
+}
+
+.swatch {
+  display: inline-block;
+  width: 0.9em;
+  height: 0.9em;
+  border-radius: 3px;
+  border: 1px solid rgba(0, 0, 0, 0.2);
+  vertical-align: -0.1em;
 }
 
 .check {
