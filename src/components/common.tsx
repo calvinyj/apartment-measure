@@ -127,3 +127,50 @@ export function InstalledAcField({ room }: { room: Room }) {
     </Field>
   )
 }
+
+/** "#abc", "abc", "#aabbcc" or "aabbcc" as "#aabbcc"; null if it isn't a hex colour. */
+export function parseHexColor(text: string): string | null {
+  const m = /^#?([0-9a-f]{3}|[0-9a-f]{6})$/i.exec(text.trim())
+  if (!m) return null
+  const h = m[1].length === 3 ? [...m[1]].map((c) => c + c).join('') : m[1]
+  return `#${h.toLowerCase()}`
+}
+
+/** Hex colour code with the browser's colour picker beside it. */
+export function ColorInput({ value, onChange }: { value: string; onChange: (hex: string) => void }) {
+  const [text, setText] = useState(value)
+  const [bad, setBad] = useState(false)
+  const focused = useRef(false)
+
+  useEffect(() => {
+    if (!focused.current) setText(value)
+  }, [value])
+
+  return (
+    <div className={`color-input${bad ? ' bad' : ''}`}>
+      {/* The code comes first so tapping the field's label focuses it rather than opening the picker. */}
+      <input
+        autoComplete="off"
+        spellCheck={false}
+        value={text}
+        placeholder="#rrggbb"
+        onFocus={(e) => {
+          focused.current = true
+          e.target.select()
+        }}
+        onBlur={() => {
+          focused.current = false
+          setBad(false)
+          setText(value)
+        }}
+        onChange={(e) => {
+          setText(e.target.value)
+          const hex = parseHexColor(e.target.value)
+          setBad(hex == null)
+          if (hex) onChange(hex)
+        }}
+      />
+      <input type="color" value={value} onChange={(e) => onChange(e.target.value)} aria-label="Pick a colour" />
+    </div>
+  )
+}

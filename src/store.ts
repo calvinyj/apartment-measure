@@ -163,7 +163,7 @@ export const useStore = create<State>((set, get) => {
           const points = [...r.points]
           points.splice(edgeIndex + 1, 0, pt)
           const edges = [...r.edges]
-          edges.splice(edgeIndex, 1, { ...old, measured: null }, { ...newEdge(), kind: old.kind, thickness: old.thickness, side: old.side, openAir: old.openAir })
+          edges.splice(edgeIndex, 1, { ...old, measured: null }, { ...newEdge(), kind: old.kind, thickness: old.thickness, side: old.side, openAir: old.openAir, paint: old.paint })
           return { ...r, points, edges }
         }),
       ),

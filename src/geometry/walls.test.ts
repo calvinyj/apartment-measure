@@ -14,6 +14,8 @@ describe('roomWallPieces', () => {
   const b = room('b', [[310, 0], [610, 0], [610, 300], [310, 300]])
   // Door drawn only on room A's side of the shared wall (edge 1), 1 m from its start.
   a.edges[1].openings = [{ id: 'd', kind: 'door', offset: 1000, width: 900, height: 2100, sill: 0 }]
+  // Window on room B's outside wall (edge 1, x = 6100).
+  b.edges[1].openings = [{ id: 'w', kind: 'window', offset: 1000, width: 1200, height: 1200, sill: 900 }]
   const project: Project = {
     version: 3,
     north: null,
@@ -51,6 +53,32 @@ describe('roomWallPieces', () => {
     const r = solved.byId.get('a')!
     const lintel = roomWallPieces(solved, r, Infinity).filter((p) => p.y0 === 2100 && p.y1 === 2700)
     expect(lintel.length).toBe(1)
+    expect(lintel[0].fullHeight).toBe(true)
+  })
+
+  it('tells a sill under a window from the full-height top', () => {
+    const r = solved.byId.get('b')!
+    const pieces = roomWallPieces(solved, r, Infinity).filter((p) => p.edge === 1)
+    expect(pieces.filter((p) => p.y1 === 900).every((p) => !p.fullHeight)).toBe(true)
+    expect(pieces.some((p) => p.y1 === 900)).toBe(true)
+    expect(pieces.filter((p) => p.y1 === 2700).every((p) => p.fullHeight)).toBe(true)
+    // Cut at 1.2 m, the cut is the top, even where the window starts below it.
+    const cut = roomWallPieces(solved, r, 1200).filter((p) => p.edge === 1)
+    expect(cut.filter((p) => p.y1 === 1200).every((p) => p.fullHeight)).toBe(true)
+  })
+
+  it('marks only the face away from the room as outer', () => {
+    const r = solved.byId.get('a')!
+    // Edge 3 is the outside wall on the left; its outer face is a full wall thickness further left.
+    const outerX = r.starts[3].x - r.edgeInfo[3].ownThickness
+    const left = roomWallPieces(solved, r, Infinity).filter((p) => p.edge === 3)
+    expect(left.length).toBeGreaterThan(0)
+    for (const p of left) {
+      expect(p.outer.filter(Boolean).length).toBe(1)
+      const i = p.outer.indexOf(true)
+      expect(p.footprint[i].x).toBeCloseTo(outerX)
+      expect(p.footprint[(i + 1) % p.footprint.length].x).toBeCloseTo(outerX)
+    }
   })
 })
 

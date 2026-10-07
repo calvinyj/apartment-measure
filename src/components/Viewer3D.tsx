@@ -13,24 +13,48 @@ import { CompassBadge } from './Compass'
 
 const M = 1 / 1000 // scene units are metres
 
-/** Plan (x, y-down) maps to scene (x, z) so the 3D view isn't mirrored. */
-function prismsGeometry(pieces: WallPiece[]): THREE.BufferGeometry {
-  const pos: number[] = []
-  const push = (p: Vec2, y: number) => pos.push(p.x * M, y * M, p.y * M)
-  for (const { footprint: f, y0, y1 } of pieces) {
+/** Off-white finish for the outside of the unit and the cut along the tops of walls. */
+const WALL_OUTER = '#f4f1ea'
+const OUTER_GLOW = 0.6
+
+/**
+ * Plan (x, y-down) maps to scene (x, z) so the 3D view isn't mirrored. Faces come in two
+ * groups: 0 is the plain outer finish, 1 is painted, coloured per vertex.
+ */
+function prismsGeometry(pieces: WallPiece[], paint: (edge: number) => THREE.Color): THREE.BufferGeometry {
+  const plain: number[] = []
+  const painted: number[] = []
+  const col: number[] = []
+  /** c = null puts the vertex on the plain outer finish. */
+  const push = (p: Vec2, y: number, c: THREE.Color | null) => {
+    if (!c) return void plain.push(p.x * M, y * M, p.y * M)
+    painted.push(p.x * M, y * M, p.y * M)
+    col.push(c.r, c.g, c.b)
+  }
+  for (const { footprint: f, y0, y1, edge, outer, fullHeight } of pieces) {
+    const c = paint(edge)
+    // Floor-level bottoms and full-height tops are plain; the underside and sill of an opening are painted.
+    const bottom = y0 > 0 ? c : null
+    const top = fullHeight ? null : c
     for (let i = 1; i < f.length - 1; i++) {
-      push(f[0], y0), push(f[i + 1], y0), push(f[i], y0)
-      push(f[0], y1), push(f[i], y1), push(f[i + 1], y1)
+      push(f[0], y0, bottom), push(f[i + 1], y0, bottom), push(f[i], y0, bottom)
+      push(f[0], y1, top), push(f[i], y1, top), push(f[i + 1], y1, top)
     }
     for (let i = 0; i < f.length; i++) {
       const a = f[i]
       const b = f[(i + 1) % f.length]
-      push(a, y0), push(b, y0), push(b, y1)
-      push(a, y0), push(b, y1), push(a, y1)
+      const side = outer[i] ? null : c
+      push(a, y0, side), push(b, y0, side), push(b, y1, side)
+      push(a, y0, side), push(b, y1, side), push(a, y1, side)
     }
   }
+  const nPlain = plain.length / 3
   const g = new THREE.BufferGeometry()
-  g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3))
+  g.setAttribute('position', new THREE.Float32BufferAttribute(plain.concat(painted), 3))
+  // The plain group ignores vertex colours, but the attribute has to cover every vertex.
+  g.setAttribute('color', new THREE.Float32BufferAttribute(new Array<number>(plain.length).fill(1).concat(col), 3))
+  g.addGroup(0, nPlain, 0)
+  g.addGroup(nPlain, painted.length / 3, 1)
   g.computeVertexNormals()
   return g
 }
@@ -46,11 +70,12 @@ function floorGeometry(outline: Vec2[]): THREE.BufferGeometry {
   return g
 }
 
-function RoomMesh({ solved, r, cutaway }: { solved: Solved; r: SolvedRoom; cutaway: boolean }) {
+function RoomMesh({ solved, r, cutaway, wallPaint }: { solved: Solved; r: SolvedRoom; cutaway: boolean; wallPaint: string }) {
   const { walls, edges } = useMemo(() => {
-    const walls = prismsGeometry(roomWallPieces(solved, r, cutaway ? 1200 : Infinity))
+    const colors = r.room.edges.map((e) => new THREE.Color(e.paint ?? wallPaint))
+    const walls = prismsGeometry(roomWallPieces(solved, r, cutaway ? 1200 : Infinity), (k) => colors[k])
     return { walls, edges: new THREE.EdgesGeometry(walls, 25) }
-  }, [solved, r, cutaway])
+  }, [solved, r, cutaway, wallPaint])
   const floor = useMemo(() => floorGeometry(r.outline), [r.outline])
   useEffect(
     () => () => {
@@ -66,7 +91,16 @@ function RoomMesh({ solved, r, cutaway }: { solved: Solved; r: SolvedRoom; cutaw
         <meshStandardMaterial color={roomTypeInfo(r.room.type).color} side={THREE.DoubleSide} roughness={0.9} />
       </mesh>
       <mesh geometry={walls} castShadow receiveShadow>
-        <meshStandardMaterial color="#f1eee8" side={THREE.DoubleSide} roughness={0.85} />
+        {/* A little self-lighting keeps the outside reading off-white on its shaded sides too. */}
+        <meshStandardMaterial
+          attach="material-0"
+          color={WALL_OUTER}
+          emissive={WALL_OUTER}
+          emissiveIntensity={OUTER_GLOW}
+          side={THREE.DoubleSide}
+          roughness={0.85}
+        />
+        <meshStandardMaterial attach="material-1" vertexColors side={THREE.DoubleSide} roughness={0.85} />
       </mesh>
       <lineSegments geometry={edges}>
         <lineBasicMaterial color="#8d877c" />
@@ -205,7 +239,7 @@ export function Viewer3D() {
         />
         {underlay && project.image && <PlanUnderlay image={project.image} mmPerPx={solved.mmPerPx} />}
         {solved.rooms.map((r) => (
-          <RoomMesh key={r.room.id} solved={solved} r={r} cutaway={cutaway} />
+          <RoomMesh key={r.room.id} solved={solved} r={r} cutaway={cutaway} wallPaint={project.settings.wallPaint} />
         ))}
         {labels && <LabelProjector anchors={anchors} layer={labelLayer} />}
         {project.north != null && <CompassTracker north={project.north} fallback={center} needle={needle} />}
@@ -222,7 +256,6 @@ export function Viewer3D() {
           ))}
         </div>
       )}
-      {project.north != null && <CompassBadge north={project.north} needle={needle} />}
       <div className="viewer-toolbar">
         <label className="check small">
           <input type="checkbox" checked={cutaway} onChange={(e) => setCutaway(e.target.checked)} /> Cut walls at 1.2 m
@@ -236,6 +269,7 @@ export function Viewer3D() {
         <button className="btn small" onClick={() => setResetKey((k) => k + 1)}>
           Reset view
         </button>
+        {project.north != null && <CompassBadge north={project.north} needle={needle} />}
       </div>
     </div>
   )

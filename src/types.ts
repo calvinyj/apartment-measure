@@ -59,6 +59,8 @@ export interface Edge {
   side: WallSide
   /** false = beyond this outside wall is the next unit, a lobby or a corridor, not open air (so no sun) */
   openAir?: boolean
+  /** paint colour of this room's face of the wall, as a hex code; missing/null = the layout's wall paint */
+  paint?: string | null
   openings: Opening[]
 }
 
@@ -108,6 +110,8 @@ export interface Settings {
   acSunnyFactor: number
   /** how far (fraction) the need can exceed an installed unit's BTU and still count as enough */
   acShortfall: number
+  /** paint colour of the inside faces of walls, as a hex code; single walls can override it */
+  wallPaint: string
 }
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -122,6 +126,7 @@ export const DEFAULT_SETTINGS: Settings = {
   acRefHeight: 2700,
   acSunnyFactor: 1.1,
   acShortfall: 0.1,
+  wallPaint: '#f1eee8',
 }
 
 export interface PlanImage {

@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { downloadFile, useStore } from '../store'
 import { exportLayout, uploadPlanImage } from '../sync'
 import type { LengthUnit, TraceMode } from '../types'
-import { Field, LengthInput, Segmented, useSolved } from './common'
+import { ColorInput, Field, LengthInput, Segmented, useSolved } from './common'
 
 const TRACE_LABEL: Record<Exclude<TraceMode, 'auto'>, string> = {
   inside: 'Inside face',
@@ -96,6 +96,16 @@ export function SettingsPage() {
             <LengthInput value={s.externalThickness} unit={s.inputUnit} onChange={(v) => v && updateSettings({ externalThickness: v })} />
           </Field>
         </div>
+      </section>
+
+      <section className="card stack">
+        <h3>Paint</h3>
+        <Field
+          label="Wall paint colour"
+          hint="Hex colour code for the inside of every wall in the 3D view. Change a single wall on its Measure step. The outside of the unit stays off-white."
+        >
+          <ColorInput value={s.wallPaint} onChange={(wallPaint) => updateSettings({ wallPaint })} />
+        </Field>
       </section>
 
       <section className="card stack">

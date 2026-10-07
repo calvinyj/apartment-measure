@@ -7,7 +7,7 @@ import { groupMeasured, groupOf, splitMeasured } from '../geometry/runs'
 import { useStore, type WizardStep } from '../store'
 import { roomTypeInfo, type Edge, type Opening, type OpeningKind, type Room, type Vec2 } from '../types'
 import { formatArea, formatLength, formatSqft } from '../units'
-import { Field, InstalledAcField, LengthInput, Segmented, useSolved } from './common'
+import { ColorInput, Field, InstalledAcField, LengthInput, Segmented, useSolved } from './common'
 import { CompassBadge } from './Compass'
 import { PlanView, type PointerInfo } from './PlanView'
 import { RoomShapes } from './RoomShapes'
@@ -309,6 +309,8 @@ function WallStep({ room, s, group }: { room: Room; s: SolvedRoom; group: number
   const currentLength = sum(group.map((i) => s.closure.lengths[i]))
   const openings = group.flatMap((i, j) => room.edges[i].openings.map((o) => ({ o, edge: i, start: starts[j] })))
 
+  const paint = edge.paint ?? settings.wallPaint
+
   const forAll = (patch: Partial<Edge>) => group.forEach((i) => updateEdge(room.id, i, patch))
   const setMeasured = (total: number | null) => {
     const parts = splitMeasured(total, group, s.estimates)
@@ -405,6 +407,25 @@ function WallStep({ room, s, group }: { room: Room; s: SolvedRoom; group: number
                 ]}
               />
             </Field>
+          )}
+        </details>
+      )}
+
+      {edge.kind === 'wall' && (
+        <details className="more" open={edge.paint != null}>
+          <summary>
+            Paint: <span className="swatch" style={{ background: paint }} /> {paint}
+            {edge.paint == null ? ' (layout colour)' : ''}
+          </summary>
+          <Field label="Paint colour" hint="Hex colour code for this room’s side of the wall, shown in the 3D view.">
+            <ColorInput value={paint} onChange={(hex) => forAll({ paint: hex })} />
+          </Field>
+          {edge.paint != null && (
+            <div className="row">
+              <button className="btn small" onClick={() => forAll({ paint: undefined })}>
+                Use the layout colour ({settings.wallPaint})
+              </button>
+            </div>
           )}
         </details>
       )}
