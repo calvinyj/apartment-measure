@@ -10,7 +10,7 @@ import { useStore } from '../store'
 import { uploadPlanImage } from '../sync'
 import { ROOM_TYPES, roomTypeInfo, type Room, type RoomType, type Vec2 } from '../types'
 import { formatLength } from '../units'
-import { Field, LengthInput, Segmented, useSolved } from './common'
+import { Field, InstalledAcField, LengthInput, Segmented, useSolved } from './common'
 import { CompassBadge, CompassDial, DegreeInput } from './Compass'
 import { PlanView, type PointerInfo } from './PlanView'
 import { RoomShapes } from './RoomShapes'
@@ -51,7 +51,9 @@ export function PlanEditor() {
     return snapPoint(raw, prev, verts, snapRadius(info, kRef.current))
   }
 
-  const finishTrace = (pts: Vec2[]) => {
+  const finishTrace = (corners: Vec2[]) => {
+    // A corner on top of the next one would be a 0 mm wall to measure.
+    const pts = corners.filter((p, i) => dist(p, corners[(i + 1) % corners.length]) > 0.5)
     if (pts.length < 3) return
     if (isSelfIntersecting(pts)) {
       setError('That outline crosses itself. Undo a few corners and try again.')
@@ -74,6 +76,11 @@ export function PlanEditor() {
         return
       }
       const s = doSnap(raw, trace[trace.length - 1] ?? null, info, trace)
+      // Snapping can land on the first corner (shared with a neighbouring room) from outside the close radius.
+      if (trace.length >= 3 && dist(s.p, trace[0]) < 0.5) {
+        finishTrace(trace)
+        return
+      }
       setTrace([...trace, s.p])
       return
     }
@@ -610,6 +617,7 @@ function RoomInspector({ room, selVertex, clearVertex }: { room: Room; selVertex
           ))}
         </datalist>
       </Field>
+      <InstalledAcField room={room} />
 
       <h3>Edges</h3>
       <p className="muted small">Mark boundaries without a physical wall (open plan) as “Open”.</p>

@@ -43,7 +43,7 @@ Set `ACCESS_KEY` whenever the server can be reached from the internet.
    - Upload the plan image.
    - **Set scale**: tap both ends of a printed dimension, such as the 12300 line, and enter its real length.
    - **Draw room**: trace each room along the *inside* faces of its walls. Corners snap to straight lines and line up with other rooms' corners. Mark boundaries with no wall (open plan) as **Open**.
-   - Set each room's type, and put open-plan spaces in a shared **aircon zone**.
+   - Set each room's type, put open-plan spaces in a shared **aircon zone**, and note any aircon that's already installed.
    - **North** (optional): turn the dial until its needle matches the plan's north arrow, or type the bearing in degrees. With no arrow on the plan, use Google Maps to see which way the windows face. The app then knows which way each room faces.
 2. **Measure** (on site, on your phone)
    - For each room, enter the ceiling height, then go wall by wall from corner A to corner B. The plan's estimate is shown, and a reading more than 8% (or 150 mm) off it is flagged.
@@ -55,12 +55,12 @@ Set `ACCESS_KEY` whenever the server can be reached from the internet.
 ## How the numbers are worked out
 
 - **Room closure.** Wall directions come from the traced plan and lengths come from your tape. Real measurements never close a room perfectly, so lengths are adjusted by weighted least squares until the outline closes exactly (`src/geometry/closure.ts`). The size of the adjustment taken up by measured walls is the room's *closure error*. A room is flagged when that error exceeds the tolerance (25 mm by default). Unmeasured walls are loose priors, so a skipped wall absorbs the error in its own direction.
-- **Placement.** Each room is shifted, again by least squares, so that faces on either side of a shared wall end up exactly one *measured* wall thickness apart (`src/geometry/layout.ts`). Shared and external walls are detected from the plan.
+- **Placement.** Each room is shifted, again by least squares, so that faces on either side of a shared wall end up exactly one *measured* wall thickness apart (`src/geometry/layout.ts`). Shared and external walls are detected from the plan. Walls of different rooms that continue one straight line on the plan (an outside wall running past the living and dining rooms, say) are kept flush, so when measurements and the plan disagree, the difference goes into the thickness of internal walls, not into a step in a straight wall.
 - **Areas.**
   - *Net* is the sum of the room interiors.
   - *Built-up* is the union of all rooms, each grown by the wall thickness it owns: half of an internal wall, and all of an external wall. **Settings** lets you count external walls at 100%, 50% or 0%, because developers measure this differently.
 - **Facing.** Once north is set, a room faces the directions of its outside walls, walls onto a balcony, and open sides with nothing beyond (`src/geometry/facing.ts`). The plan can't tell open air from the next unit or a corridor, so in the **North** tool the outside walls are coloured by direction. Tap any that are really against the next unit, a lobby or a corridor to rule them out (also on each wall's Measure step).
-- **Aircon.** Area (ft²) × 60 BTU/h × (ceiling height ÷ 2.7 m), plus 10% for rooms with afternoon sun. A room gets the sun margin automatically when it faces SW, W or NW; you can override it per room in Measure. The result is rounded up to a standard 1.0, 1.5, 2.0 or 2.5 HP unit. This is a Malaysian rule of thumb: use it for budgeting, and confirm with the installer.
+- **Aircon.** Area (ft²) × 60 BTU/h × (ceiling height ÷ 2.7 m), plus 10% for rooms with afternoon sun. A room gets the sun margin automatically when it faces SW, W or NW; you can override it per room in Measure. The result is rounded up to a standard 1.0, 1.5, 2.0 or 2.5 HP unit. If a room already has a unit (set **Aircon already installed** on the Plan tab or the room's Measure step), the report checks it instead: green if it covers the estimate, allowing the estimate to be up to 10% above its rating (adjustable in Settings), red if it may be too small. The units in all rooms of an aircon zone add up. This is a Malaysian rule of thumb: use it for budgeting, and confirm with the installer.
 
 ## Known limits / next ideas
 

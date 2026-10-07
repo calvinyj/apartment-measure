@@ -76,6 +76,8 @@ export interface Room {
   acZone: string
   /** override whether this room needs aircon; null = by room type */
   ac: boolean | null
+  /** HP of a unit already installed in this room (e.g. 1.5); missing/null = none, so one is suggested */
+  acInstalled?: number | null
   /** gets strong afternoon sun (adds aircon margin); null = work it out from which way the room faces */
   sunny: boolean | null
 }
@@ -104,6 +106,8 @@ export interface Settings {
   acBtuPerSqft: number
   acRefHeight: number
   acSunnyFactor: number
+  /** how far (fraction) the need can exceed an installed unit's BTU and still count as enough */
+  acShortfall: number
 }
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -117,6 +121,7 @@ export const DEFAULT_SETTINGS: Settings = {
   acBtuPerSqft: 60,
   acRefHeight: 2700,
   acSunnyFactor: 1.1,
+  acShortfall: 0.1,
 }
 
 export interface PlanImage {

@@ -170,3 +170,36 @@ describe('rooms traced on wall centre lines', () => {
     expect(s.grossArea / 1e6).toBeCloseTo((6200 * 3200) / 1e6, 3)
   })
 })
+
+describe('a straight wall shared by several rooms', () => {
+  // Living over dining (open between them) share the outside wall x = 0. To their right,
+  // a study and a bath, then a store spanning both. The study measures 100 mm wider than
+  // the plan, which pushes the living room left; the outside wall must stay straight.
+  const living = room('living', [[0, 0], [300, 0], [300, 200], [0, 200]], [null, null, null, null])
+  living.edges[2].kind = 'open'
+  const dining = room('dining', [[0, 200], [300, 200], [300, 400], [0, 400]], [null, null, null, null])
+  dining.edges[0].kind = 'open'
+  const project: Project = {
+    version: 3,
+    north: null,
+    name: 'flush',
+    image: null,
+    calibration: { a: { x: 0, y: 0 }, b: { x: 100, y: 0 }, mm: 1000 },
+    rooms: [
+      living,
+      dining,
+      room('study', [[315, 0], [500, 0], [500, 185], [315, 185]], [1950, 1850, 1950, 1850]),
+      room('bath', [[315, 200], [500, 200], [500, 400], [315, 400]], [null, null, null, null]),
+      room('store', [[515, 0], [700, 0], [700, 400], [515, 400]], [null, null, null, null]),
+    ],
+    settings: { ...DEFAULT_SETTINGS, traceMode: 'inside', internalThickness: 150 },
+    advertised: null,
+  }
+  const s = solveProject(project)
+
+  it('keeps the outside wall straight across the rooms', () => {
+    const livingWall = s.byId.get('living')!.starts[3].x
+    const diningWall = s.byId.get('dining')!.starts[3].x
+    expect(Math.abs(livingWall - diningWall)).toBeLessThan(2)
+  })
+})

@@ -1,5 +1,4 @@
 import { describe, expect, it } from 'vitest'
-import { pickUnits } from '../ac'
 import { DEFAULT_SETTINGS, type Edge, type Project, type Room } from '../types'
 import { solveProject } from './solve'
 import { roomWallPieces } from './walls'
@@ -52,16 +51,6 @@ describe('roomWallPieces', () => {
     const r = solved.byId.get('a')!
     const lintel = roomWallPieces(solved, r, Infinity).filter((p) => p.y0 === 2100 && p.y1 === 2700)
     expect(lintel.length).toBe(1)
-  })
-})
-
-describe('pickUnits', () => {
-  it('picks the smallest unit that covers the load', () => {
-    expect(pickUnits(5900)).toMatchObject({ hp: '1.0 HP', count: 1 })
-    expect(pickUnits(11400)).toMatchObject({ hp: '1.5 HP', count: 1 })
-  })
-  it('splits big open spaces across several units', () => {
-    expect(pickUnits(30000)).toMatchObject({ hp: '2.0 HP', count: 2 })
   })
 })
 

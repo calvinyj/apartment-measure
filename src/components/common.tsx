@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent, type ReactNode } from 'react'
+import { AC_SIZES, hpLabel } from '../ac'
 import { solveProject } from '../geometry/solve'
 import { useStore } from '../store'
-import type { LengthUnit } from '../types'
+import type { LengthUnit, Room } from '../types'
 import { parseLength, toUnit } from '../units'
 
 export function useSolved() {
@@ -104,5 +105,25 @@ export function Segmented<T extends string>({
         </button>
       ))}
     </div>
+  )
+}
+
+/** Pre-installed aircon in a room; the report checks it against the estimate instead of suggesting one. */
+export function InstalledAcField({ room }: { room: Room }) {
+  const updateRoom = useStore((s) => s.updateRoom)
+  return (
+    <Field label="Aircon already installed" hint="Leave as None to get a suggested size. Units in the same aircon zone add up.">
+      <select
+        value={room.acInstalled == null ? '' : String(room.acInstalled)}
+        onChange={(e) => updateRoom(room.id, { acInstalled: e.target.value === '' ? null : Number(e.target.value) })}
+      >
+        <option value="">None</option>
+        {AC_SIZES.map((x) => (
+          <option key={x.hp} value={x.hp}>
+            {hpLabel(x.hp)}
+          </option>
+        ))}
+      </select>
+    </Field>
   )
 }
