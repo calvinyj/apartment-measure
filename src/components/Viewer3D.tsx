@@ -8,7 +8,7 @@ import { centroid } from '../geometry/polygon'
 import { useStore } from '../store'
 import { roomTypeInfo, type Vec2 } from '../types'
 import { formatArea } from '../units'
-import { useSolved } from './common'
+import { PlanImageToggle, useSolved } from './common'
 import { CompassBadge } from './Compass'
 
 const M = 1 / 1000 // scene units are metres
@@ -183,7 +183,6 @@ export function Viewer3D() {
   const solved = useSolved()
   const [cutaway, setCutaway] = useState(false)
   const [labels, setLabels] = useState(true)
-  const [underlay, setUnderlay] = useState(true)
   const [resetKey, setResetKey] = useState(0)
   const labelLayer = useRef<HTMLDivElement>(null)
   const needle = useRef<SVGGElement>(null)
@@ -237,7 +236,7 @@ export function Viewer3D() {
           shadow-camera-top={size}
           shadow-camera-bottom={-size}
         />
-        {underlay && project.image && <PlanUnderlay image={project.image} mmPerPx={solved.mmPerPx} />}
+        {project.settings.showPlanImage && project.image && <PlanUnderlay image={project.image} mmPerPx={solved.mmPerPx} />}
         {solved.rooms.map((r) => (
           <RoomMesh key={r.room.id} solved={solved} r={r} cutaway={cutaway} wallPaint={project.settings.wallPaint} />
         ))}
@@ -263,9 +262,7 @@ export function Viewer3D() {
         <label className="check small">
           <input type="checkbox" checked={labels} onChange={(e) => setLabels(e.target.checked)} /> Labels
         </label>
-        <label className="check small">
-          <input type="checkbox" checked={underlay} onChange={(e) => setUnderlay(e.target.checked)} /> Plan underlay
-        </label>
+        <PlanImageToggle />
         <button className="btn small" onClick={() => setResetKey((k) => k + 1)}>
           Reset view
         </button>

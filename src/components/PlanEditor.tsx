@@ -8,11 +8,12 @@ import { snapPoint, type Snapped } from '../geometry/snap'
 import { add, dist, lerp, norm, outward, scale, sub } from '../geometry/vec'
 import { useStore } from '../store'
 import { uploadPlanImage } from '../sync'
-import { ROOM_TYPES, roomTypeInfo, type Room, type RoomType, type Vec2 } from '../types'
+import { ROOM_TYPES, roomTypeInfo, type Calibration, type Room, type RoomType, type Vec2 } from '../types'
 import { formatLength } from '../units'
-import { Field, InstalledAcField, LengthInput, Segmented, useSolved } from './common'
+import { Field, InstalledAcField, LengthInput, PlanImageToggle, Segmented, useSolved } from './common'
 import { CompassBadge, CompassDial, DegreeInput } from './Compass'
 import { PlanView, type PointerInfo } from './PlanView'
+import { RescaleToMeasurements } from './Rescale'
 import { RoomShapes } from './RoomShapes'
 
 type Tool = 'select' | 'trace' | 'calibrate' | 'north'
@@ -192,6 +193,7 @@ export function PlanEditor() {
       <div className="canvas-wrap">
         <PlanView
           image={image}
+          showImage={project.settings.showPlanImage}
           fit={fit}
           fitKey={image.src}
           cursor={cursor}
@@ -234,6 +236,7 @@ export function PlanEditor() {
               <input type="checkbox" checked={snapOn} onChange={(e) => setSnapOn(e.target.checked)} /> Snap
             </label>
           )}
+          <PlanImageToggle />
         </div>
         {tool === 'north' && showDial ? (
           <CompassDial value={project.north} onChange={setNorth} />
@@ -258,6 +261,10 @@ export function PlanEditor() {
             onClear={() => {
               setCalib([])
               setCalibration(null)
+            }}
+            onRescale={(c) => {
+              setCalib([c.a, c.b])
+              setCalibMm(c.mm)
             }}
           />
         )}
@@ -390,12 +397,14 @@ function CalibratePanel({
   setMm,
   onSave,
   onClear,
+  onRescale,
 }: {
   points: Vec2[]
   mm: number | null
   setMm: (v: number | null) => void
   onSave: () => void
   onClear: () => void
+  onRescale: (c: Calibration) => void
 }) {
   const unit = useStore((s) => s.project.settings.inputUnit)
   return (
@@ -421,6 +430,7 @@ function CalibratePanel({
           </div>
         </>
       )}
+      <RescaleToMeasurements onChange={onRescale} />
     </div>
   )
 }

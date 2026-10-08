@@ -49,12 +49,15 @@ Set `ACCESS_KEY` whenever the server can be reached from the internet.
    - For each room, enter the ceiling height, then go wall by wall from corner A to corner B. The plan's estimate is shown, and a reading more than 8% (or 150 mm) off it is flagged.
    - You can skip a wall you can't reach. It is worked out from the other walls.
    - Optionally enter the wall thickness (measure it at a door frame) and the doors and windows on each wall.
-3. **3D**: orbit around the model, cut the walls at 1.2 m to see the layout, and show the plan underneath. Inside walls are drawn in the paint colour set in **Settings → Paint** (a hex code such as `#c8d8c0`). To give one wall a different colour, open **Paint** on that wall's Measure step. The outside of the unit stays off-white.
+   - **Rescale** if the plan isn't to scale. Brochure plans often aren't quite to scale. Once you've measured 3 or more walls, the room list tells you if they come out consistently longer or shorter than the plan (by 1% or more), and **Rescale the plan to match** fits the scale to them. Any wall you skipped then gets a better estimate. The same option is under **Set scale** on the Plan tab, with **Undo** straight after.
+   - If the plan is wrong in places rather than just the wrong size, untick **Plan image** above the plan (Plan, Measure or 3D) to hide it for this layout.
+3. **3D**: orbit around the model, cut the walls at 1.2 m to see the layout, and show the plan image underneath. Inside walls are drawn in the paint colour set in **Settings → Paint** (a hex code such as `#c8d8c0`). To give one wall a different colour, open **Paint** on that wall's Measure step. The outside of the unit stays off-white.
 4. **Report**: net area, estimated built-up area, a comparison with the advertised area, a per-room table, aircon sizing, and a CSV export.
 
 ## How the numbers are worked out
 
 - **Room closure.** Wall directions come from the traced plan and lengths come from your tape. Real measurements never close a room perfectly, so lengths are adjusted by weighted least squares until the outline closes exactly (`src/geometry/closure.ts`). The size of the adjustment taken up by measured walls is the room's *closure error*. A room is flagged when that error exceeds the tolerance (25 mm by default). Unmeasured walls are loose priors, so a skipped wall absorbs the error in its own direction.
+- **Rescaling.** Each measured wall gives a scale: its length plus the wall thickness between the traced line and the inside face, divided by its traced length in pixels. Walls more than 8% (or 150 mm) off the median are left out, as a typo or a spot where the plan is wrong. The rest are fitted by least squares, so long walls count most (`src/geometry/scale.ts`). Rescaling only changes the real length of the dimension you set the scale with. Your measurements stay as they are.
 - **Placement.** Each room is shifted, again by least squares, so that faces on either side of a shared wall end up exactly one *measured* wall thickness apart (`src/geometry/layout.ts`). Shared and external walls are detected from the plan. Walls of different rooms that continue one straight line on the plan (an outside wall running past the living and dining rooms, say) are kept flush, so when measurements and the plan disagree, the difference goes into the thickness of internal walls, not into a step in a straight wall.
 - **Areas.**
   - *Net* is the sum of the room interiors.
@@ -65,6 +68,7 @@ Set `ACCESS_KEY` whenever the server can be reached from the internet.
 ## Known limits / next ideas
 
 - Wall angles come from the plan, so a room that is out of square isn't detected. Measuring the diagonals would fix this.
+- Rescaling uses one scale for the whole plan, so a plan stretched more one way than the other is only half corrected.
 - Room tracing is manual. A vision model could draft the rooms for you to correct.
 - Plans in PDF format need converting to an image first.
 - Laser measure over Bluetooth (Bosch/Leica) works on Android Chrome only.

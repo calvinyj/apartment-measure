@@ -108,6 +108,17 @@ export function Segmented<T extends string>({
   )
 }
 
+/** Shows or hides the plan image wherever it's drawn (Plan, Measure and 3D) for this layout. */
+export function PlanImageToggle() {
+  const show = useStore((s) => s.project.settings.showPlanImage)
+  const updateSettings = useStore((s) => s.updateSettings)
+  return (
+    <label className="check small">
+      <input type="checkbox" checked={show} onChange={(e) => updateSettings({ showPlanImage: e.target.checked })} /> Plan image
+    </label>
+  )
+}
+
 /** Pre-installed aircon in a room; the report checks it against the estimate instead of suggesting one. */
 export function InstalledAcField({ room }: { room: Room }) {
   const updateRoom = useStore((s) => s.updateRoom)

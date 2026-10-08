@@ -18,6 +18,8 @@ export interface FitBox {
 
 interface Props {
   image: { src: string; width: number; height: number } | null
+  /** false hides the image but keeps the view framed as if it were there */
+  showImage?: boolean
   fit: FitBox | null
   /** refit whenever this changes */
   fitKey?: string
@@ -45,7 +47,7 @@ type Gesture =
 
 const TAP_SLOP = 6
 
-export function PlanView({ image, fit, fitKey, cursor, onTap, onHover, onHandleDown, onDrag, onDragEnd, children }: Props) {
+export function PlanView({ image, showImage = true, fit, fitKey, cursor, onTap, onHover, onHandleDown, onDrag, onDragEnd, children }: Props) {
   const svgRef = useRef<SVGSVGElement>(null)
   const [view, setView] = useState<View>({ k: 1, tx: 0, ty: 0 })
   const viewRef = useRef(view)
@@ -200,7 +202,7 @@ export function PlanView({ image, fit, fitKey, cursor, onTap, onHover, onHandleD
         onPointerLeave={(e) => e.pointerType === 'mouse' && onHover?.(null, info(e))}
       >
         <g transform={`translate(${view.tx} ${view.ty}) scale(${view.k})`}>
-          {image && <image href={image.src} width={image.width} height={image.height} style={{ opacity: 0.85 }} />}
+          {image && showImage && <image href={image.src} width={image.width} height={image.height} style={{ opacity: 0.85 }} />}
           {children?.(view.k)}
         </g>
       </svg>
