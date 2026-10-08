@@ -4,12 +4,14 @@ import { bbox, centroid, pointInPolygon } from '../geometry/polygon'
 import type { SolvedRoom } from '../geometry/solve'
 import { add, dist, dot, lerp, norm, outward, scale, sub } from '../geometry/vec'
 import { groupMeasured, groupOf, splitMeasured } from '../geometry/runs'
+import { deviates } from '../geometry/scale'
 import { useStore, type WizardStep } from '../store'
 import { roomTypeInfo, type Edge, type Opening, type OpeningKind, type Room, type Vec2 } from '../types'
 import { formatArea, formatLength, formatSqft } from '../units'
-import { ColorInput, Field, InstalledAcField, LengthInput, Segmented, useSolved } from './common'
+import { ColorInput, Field, InstalledAcField, LengthInput, PlanImageToggle, Segmented, useSolved } from './common'
 import { CompassBadge } from './Compass'
 import { PlanView, type PointerInfo } from './PlanView'
+import { RescaleToMeasurements } from './Rescale'
 import { RoomShapes } from './RoomShapes'
 
 const OPENING_DEFAULTS: Record<OpeningKind, Omit<Opening, 'id' | 'offset'>> = {
@@ -17,9 +19,6 @@ const OPENING_DEFAULTS: Record<OpeningKind, Omit<Opening, 'id' | 'offset'>> = {
   window: { kind: 'window', width: 1200, height: 1200, sill: 900 },
   opening: { kind: 'opening', width: 900, height: 2100, sill: 0 },
 }
-
-/** A measurement this far from the plan is probably a typo or the wrong wall. */
-const deviates = (measured: number, estimate: number) => Math.abs(measured - estimate) > Math.max(150, estimate * 0.08)
 
 export function MeasureView() {
   const project = useStore((s) => s.project)
@@ -81,7 +80,14 @@ export function MeasureView() {
   return (
     <div className="split">
       <div className="canvas-wrap">
-        <PlanView image={project.image} fit={fit} fitKey={room?.id ?? 'all'} cursor="pointer" onTap={onTap}>
+        <PlanView
+          image={project.image}
+          showImage={project.settings.showPlanImage}
+          fit={fit}
+          fitKey={room?.id ?? 'all'}
+          cursor="pointer"
+          onTap={onTap}
+        >
           {(vk) => {
             viewK.current = vk
             return (
@@ -92,6 +98,9 @@ export function MeasureView() {
             )
           }}
         </PlanView>
+        <div className="canvas-toolbar">
+          <PlanImageToggle />
+        </div>
         {project.north != null && <CompassBadge north={project.north} />}
       </div>
       <aside className="panel">
@@ -138,6 +147,7 @@ function RoomPicker() {
       <p className="muted">
         {done} of {project.rooms.length} rooms fully measured
       </p>
+      <RescaleToMeasurements nudge />
       <ul className="room-list">
         {solved.rooms.map((s) => (
           <li key={s.room.id}>
