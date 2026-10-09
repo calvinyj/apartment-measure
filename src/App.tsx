@@ -4,6 +4,7 @@ import { MeasureView } from './components/MeasureView'
 import { PlanEditor } from './components/PlanEditor'
 import { Report } from './components/Report'
 import { SettingsPage } from './components/SettingsPage'
+import { Viewer2D } from './components/Viewer2D'
 import { useStore, type SaveState, type Tab } from './store'
 import { boot, login, resolveConflict } from './sync'
 
@@ -13,6 +14,7 @@ const Viewer3D = lazy(() => import('./components/Viewer3D').then((m) => ({ defau
 const TABS: { id: Tab; label: string }[] = [
   { id: 'plan', label: 'Plan' },
   { id: 'measure', label: 'Measure' },
+  { id: '2d', label: '2D' },
   { id: '3d', label: '3D' },
   { id: 'report', label: 'Report' },
   { id: 'settings', label: 'Settings' },
@@ -76,6 +78,7 @@ export function App() {
         {current === 'layouts' && <LayoutsPage />}
         {current === 'plan' && <PlanEditor />}
         {current === 'measure' && <MeasureView />}
+        {current === '2d' && <Viewer2D />}
         {current === '3d' && (
           <Suspense fallback={<div className="empty">Loading 3D…</div>}>
             <Viewer3D />

@@ -101,15 +101,20 @@ export function CompassDial({ value, onChange }: { value: number | null; onChang
   )
 }
 
-/** Small north arrow for a view's corner; `needle` lets a 3D view turn it as the camera orbits. */
+/**
+ * Small north arrow for a view's corner; `needle` lets a 3D view turn it as the camera orbits,
+ * and `turn` is a 2D view's rotation, so the needle still points north on screen.
+ */
 export function CompassBadge({
   north,
   onClick,
   needle,
+  turn = 0,
 }: {
   north: number | null
   onClick?: () => void
   needle?: RefObject<SVGGElement | null>
+  turn?: number
 }) {
   const rose = (
     <svg viewBox="-22 -22 44 44" aria-hidden>
@@ -118,7 +123,7 @@ export function CompassBadge({
           N?
         </text>
       ) : (
-        <g ref={needle} transform={`rotate(${north})`}>
+        <g ref={needle} transform={`rotate(${north + turn})`}>
           <path d="M 0 -6 L 6 14 L 0 10 L -6 14 Z" className="badge-arrow" />
           <text y={-9} className="badge-n">
             N

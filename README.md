@@ -50,9 +50,10 @@ Set `ACCESS_KEY` whenever the server can be reached from the internet.
    - You can skip a wall you can't reach. It is worked out from the other walls.
    - Optionally enter the wall thickness (measure it at a door frame) and the doors and windows on each wall.
    - **Rescale** if the plan isn't to scale. Brochure plans often aren't quite to scale. Once you've measured 3 or more walls, the room list tells you if they come out consistently longer or shorter than the plan (by 1% or more), and **Rescale the plan to match** fits the scale to them. Any wall you skipped then gets a better estimate. The same option is under **Set scale** on the Plan tab, with **Undo** straight after.
-   - If the plan is wrong in places rather than just the wrong size, untick **Plan image** above the plan (Plan, Measure or 3D) to hide it for this layout.
-3. **3D**: orbit around the model, cut the walls at 1.2 m to see the layout, and show the plan image underneath. Inside walls are drawn in the paint colour set in **Settings → Paint** (a hex code such as `#c8d8c0`). To give one wall a different colour, open **Paint** on that wall's Measure step. The outside of the unit stays off-white.
-4. **Report**: net area, estimated built-up area, a comparison with the advertised area, a per-room table, aircon sizing, and a CSV export.
+   - If the plan is wrong in places rather than just the wrong size, untick **Plan image** above the plan (Plan, Measure, 2D or 3D) to hide it for this layout.
+3. **2D**: a read-only floor plan drawn from your measurements: solid walls cut at 1.2 m, windows, door gaps, room names and areas, and each wall's length (as measured, or `≈` the worked-out length for a wall you skipped). Pinch or scroll to zoom. To turn the plan, twist with two fingers, drag with the right mouse button (or Shift-drag), or use the ↺ ↻ buttons. It snaps square near each quarter turn. With north set, **North up** turns north to the top.
+4. **3D**: orbit around the model, cut the walls at 1.2 m to see the layout, and show the plan image underneath. Inside walls are drawn in the paint colour set in **Settings → Paint** (a hex code such as `#c8d8c0`). To give one wall a different colour, open **Paint** on that wall's Measure step. The outside of the unit stays off-white.
+5. **Report**: net area, estimated built-up area, a comparison with the advertised area, a per-room table, aircon sizing, and a CSV export.
 
 ## How the numbers are worked out
 

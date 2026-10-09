@@ -108,7 +108,7 @@ export function Segmented<T extends string>({
   )
 }
 
-/** Shows or hides the plan image wherever it's drawn (Plan, Measure and 3D) for this layout. */
+/** Shows or hides the plan image wherever it's drawn (Plan, Measure, 2D and 3D) for this layout. */
 export function PlanImageToggle() {
   const show = useStore((s) => s.project.settings.showPlanImage)
   const updateSettings = useStore((s) => s.updateSettings)

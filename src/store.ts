@@ -47,7 +47,7 @@ export function normalizeProject(raw: unknown): Project {
   }
 }
 
-export type Tab = 'layouts' | 'plan' | 'measure' | '3d' | 'report' | 'settings'
+export type Tab = 'layouts' | 'plan' | 'measure' | '2d' | '3d' | 'report' | 'settings'
 export type WizardStep = 'room' | number | 'summary'
 export type SaveState = 'saved' | 'pending' | 'saving' | 'offline' | 'conflict' | 'error'
 
