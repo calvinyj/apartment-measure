@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react'
+import { normDeg } from '../geometry/facing'
 import type { Vec2 } from '../types'
 
 export interface PointerInfo {
@@ -30,41 +31,110 @@ interface Props {
   onHandleDown?: (handle: string) => boolean
   onDrag?: (p: Vec2, info: PointerInfo) => void
   onDragEnd?: () => void
-  children?: (k: number) => ReactNode
+  /** view rotation in degrees, clockwise on screen */
+  rotation?: number
+  /** lets the user turn the view: two-finger twist, or drag with the right mouse button (or Shift) */
+  onRotate?: (deg: number) => void
+  children?: (k: number, rotation: number) => ReactNode
 }
 
 interface View {
   k: number
   tx: number
   ty: number
+  /** rotation, degrees clockwise */
+  a: number
 }
 
 type Gesture =
   | { type: 'idle' }
   | { type: 'press'; x: number; y: number; handle: string | null; dragging: boolean }
   | { type: 'pan'; x: number; y: number; view: View }
-  | { type: 'pinch'; dist: number; mid: Vec2; view: View }
+  | { type: 'pinch'; dist: number; angle: number; mid: Vec2; view: View }
+  | { type: 'turn'; from: number; view: View }
 
 const TAP_SLOP = 6
+const RAD = Math.PI / 180
 
-export function PlanView({ image, showImage = true, fit, fitKey, cursor, onTap, onHover, onHandleDown, onDrag, onDragEnd, children }: Props) {
+const clampK = (k: number) => Math.min(40, Math.max(0.05, k))
+
+/** Pulled square when within a few degrees of a quarter turn (plans are drawn square). */
+const snapTurn = (deg: number) => {
+  const q = Math.round(deg / 90) * 90
+  return normDeg(Math.abs(deg - q) < 4 ? q : deg)
+}
+
+/** The plan point under screen point s. */
+function planAt(v: View, s: Vec2): Vec2 {
+  const x = (s.x - v.tx) / v.k
+  const y = (s.y - v.ty) / v.k
+  const c = Math.cos(v.a * RAD)
+  const sn = Math.sin(v.a * RAD)
+  return { x: x * c + y * sn, y: y * c - x * sn }
+}
+
+/** The view at scale k and rotation a that puts plan point p under screen point s. */
+function place(p: Vec2, s: Vec2, k: number, a: number): View {
+  const c = Math.cos(a * RAD)
+  const sn = Math.sin(a * RAD)
+  return { k, a, tx: s.x - k * (p.x * c - p.y * sn), ty: s.y - k * (p.x * sn + p.y * c) }
+}
+
+export function PlanView({
+  image,
+  showImage = true,
+  fit,
+  fitKey,
+  cursor,
+  onTap,
+  onHover,
+  onHandleDown,
+  onDrag,
+  onDragEnd,
+  rotation = 0,
+  onRotate,
+  children,
+}: Props) {
   const svgRef = useRef<SVGSVGElement>(null)
-  const [view, setView] = useState<View>({ k: 1, tx: 0, ty: 0 })
+  const [view, setView] = useState<View>({ k: 1, tx: 0, ty: 0, a: 0 })
   const viewRef = useRef(view)
   viewRef.current = view
   const pointers = useRef(new Map<number, Vec2>())
   const gesture = useRef<Gesture>({ type: 'idle' })
   const userMoved = useRef(false)
 
+  // Kept in step straight away so back-to-back changes in one event build on each other.
+  const commit = (v: View) => {
+    viewRef.current = v
+    setView(v)
+  }
+
+  const centre = (): Vec2 => {
+    const r = svgRef.current!.getBoundingClientRect()
+    return { x: r.width / 2, y: r.height / 2 }
+  }
+
   const doFit = useCallback(() => {
     const svg = svgRef.current
     if (!svg || !fit) return
     const { width, height } = svg.getBoundingClientRect()
     if (width === 0 || height === 0) return
-    const k = Math.min(width / fit.w, height / fit.h) * 0.92
-    setView({ k, tx: (width - fit.w * k) / 2 - fit.minX * k, ty: (height - fit.h * k) / 2 - fit.minY * k })
+    // Fit the box as it lies once turned.
+    const c = Math.abs(Math.cos(rotation * RAD))
+    const sn = Math.abs(Math.sin(rotation * RAD))
+    const k = Math.min(width / (fit.w * c + fit.h * sn), height / (fit.w * sn + fit.h * c)) * 0.92
+    commit(place({ x: fit.minX + fit.w / 2, y: fit.minY + fit.h / 2 }, { x: width / 2, y: height / 2 }, k, rotation))
     userMoved.current = false
-  }, [fit?.minX, fit?.minY, fit?.w, fit?.h])
+  }, [fit?.minX, fit?.minY, fit?.w, fit?.h, rotation])
+
+  // Rotation set from outside (a button): turn about the middle, or refit if the user hasn't moved the view.
+  useLayoutEffect(() => {
+    const v = viewRef.current
+    if (v.a === rotation || !svgRef.current) return
+    const c = centre()
+    commit(place(planAt(v, c), c, v.k, rotation))
+    if (!userMoved.current) doFit()
+  }, [rotation])
 
   useLayoutEffect(() => {
     doFit()
@@ -84,10 +154,7 @@ export function PlanView({ image, showImage = true, fit, fitKey, cursor, onTap, 
     const r = svgRef.current!.getBoundingClientRect()
     return { x: clientX - r.left, y: clientY - r.top }
   }
-  const toPlan = (s: Vec2): Vec2 => {
-    const v = viewRef.current
-    return { x: (s.x - v.tx) / v.k, y: (s.y - v.ty) / v.k }
-  }
+  const toPlan = (s: Vec2): Vec2 => planAt(viewRef.current, s)
   const info = (e: React.PointerEvent | PointerEvent, handle: string | null = null): PointerInfo => ({
     shiftKey: e.shiftKey,
     altKey: e.altKey,
@@ -104,10 +171,8 @@ export function PlanView({ image, showImage = true, fit, fitKey, cursor, onTap, 
       const s = local(e.clientX, e.clientY)
       const v = viewRef.current
       const f = Math.exp(-e.deltaY * (e.ctrlKey ? 0.01 : 0.0015))
-      const k = Math.min(40, Math.max(0.05, v.k * f))
-      const p = { x: (s.x - v.tx) / v.k, y: (s.y - v.ty) / v.k }
       userMoved.current = true
-      setView({ k, tx: s.x - p.x * k, ty: s.y - p.y * k })
+      commit(place(planAt(v, s), s, clampK(v.k * f), v.a))
     }
     svg.addEventListener('wheel', onWheel, { passive: false })
     return () => svg.removeEventListener('wheel', onWheel)
@@ -118,16 +183,35 @@ export function PlanView({ image, showImage = true, fit, fitKey, cursor, onTap, 
     gesture.current = {
       type: 'pinch',
       dist: Math.hypot(a.x - b.x, a.y - b.y),
+      angle: Math.atan2(b.y - a.y, b.x - a.x) / RAD,
       mid: { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 },
       view: viewRef.current,
     }
   }
 
+  /** Pointer angle around the middle of the view, degrees. */
+  const angleAt = (s: Vec2) => {
+    const c = centre()
+    return Math.atan2(s.y - c.y, s.x - c.x) / RAD
+  }
+
+  const turnTo = (a: number) => {
+    if (a === viewRef.current.a) return
+    const c = centre()
+    commit(place(planAt(viewRef.current, c), c, viewRef.current.k, a))
+    onRotate?.(a)
+  }
+
   const onPointerDown = (e: React.PointerEvent) => {
-    if (e.button !== 0 && e.pointerType === 'mouse') return
+    const turning = onRotate != null && e.pointerType === 'mouse' && (e.button === 2 || (e.button === 0 && e.shiftKey))
+    if (e.button !== 0 && e.pointerType === 'mouse' && !turning) return
     svgRef.current!.setPointerCapture(e.pointerId)
     const s = local(e.clientX, e.clientY)
     pointers.current.set(e.pointerId, s)
+    if (turning) {
+      gesture.current = { type: 'turn', from: angleAt(s), view: viewRef.current }
+      return
+    }
     if (pointers.current.size === 2) {
       if (gesture.current.type === 'press' && gesture.current.dragging) onDragEnd?.()
       startPinch()
@@ -151,10 +235,14 @@ export function PlanView({ image, showImage = true, fit, fitKey, cursor, onTap, 
       const [a, b] = [...pointers.current.values()]
       const d = Math.hypot(a.x - b.x, a.y - b.y)
       const mid = { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 }
-      const k = Math.min(40, Math.max(0.05, (g.view.k * d) / g.dist))
-      const p = { x: (g.mid.x - g.view.tx) / g.view.k, y: (g.mid.y - g.view.ty) / g.view.k }
+      const turn = onRotate ? snapTurn(g.view.a + Math.atan2(b.y - a.y, b.x - a.x) / RAD - g.angle) : g.view.a
+      const turned = turn !== viewRef.current.a
       userMoved.current = true
-      setView({ k, tx: mid.x - p.x * k, ty: mid.y - p.y * k })
+      commit(place(planAt(g.view, g.mid), mid, clampK((g.view.k * d) / g.dist), turn))
+      if (turned) onRotate?.(turn)
+    } else if (g.type === 'turn') {
+      userMoved.current = true
+      turnTo(snapTurn(g.view.a + angleAt(s) - g.from))
     } else if (g.type === 'press') {
       if (g.dragging) {
         onDrag?.(toPlan(s), info(e, g.handle))
@@ -163,7 +251,7 @@ export function PlanView({ image, showImage = true, fit, fitKey, cursor, onTap, 
       }
     } else if (g.type === 'pan') {
       userMoved.current = true
-      setView({ ...g.view, tx: g.view.tx + s.x - g.x, ty: g.view.ty + s.y - g.y })
+      commit({ ...g.view, tx: g.view.tx + s.x - g.x, ty: g.view.ty + s.y - g.y })
     }
     if (e.pointerType === 'mouse') onHover?.(toPlan(s), info(e))
   }
@@ -190,6 +278,13 @@ export function PlanView({ image, showImage = true, fit, fitKey, cursor, onTap, 
     gesture.current = { type: 'idle' }
   }
 
+  const zoomBy = (f: number) => {
+    const v = viewRef.current
+    const c = centre()
+    userMoved.current = true
+    commit(place(planAt(v, c), c, clampK(v.k * f), v.a))
+  }
+
   return (
     <div className="plan-view">
       <svg
@@ -200,37 +295,18 @@ export function PlanView({ image, showImage = true, fit, fitKey, cursor, onTap, 
         onPointerUp={onPointerUp}
         onPointerCancel={onPointerCancel}
         onPointerLeave={(e) => e.pointerType === 'mouse' && onHover?.(null, info(e))}
+        onContextMenu={onRotate ? (e) => e.preventDefault() : undefined}
       >
-        <g transform={`translate(${view.tx} ${view.ty}) scale(${view.k})`}>
+        <g transform={`translate(${view.tx} ${view.ty}) rotate(${view.a}) scale(${view.k})`}>
           {image && showImage && <image href={image.src} width={image.width} height={image.height} style={{ opacity: 0.85 }} />}
-          {children?.(view.k)}
+          {children?.(view.k, view.a)}
         </g>
       </svg>
       <div className="zoom-buttons">
-        <button
-          title="Zoom in"
-          onClick={() => {
-            const r = svgRef.current!.getBoundingClientRect()
-            const v = viewRef.current
-            const c = { x: r.width / 2, y: r.height / 2 }
-            const k = Math.min(40, v.k * 1.4)
-            userMoved.current = true
-            setView({ k, tx: c.x - ((c.x - v.tx) / v.k) * k, ty: c.y - ((c.y - v.ty) / v.k) * k })
-          }}
-        >
+        <button title="Zoom in" onClick={() => zoomBy(1.4)}>
           +
         </button>
-        <button
-          title="Zoom out"
-          onClick={() => {
-            const r = svgRef.current!.getBoundingClientRect()
-            const v = viewRef.current
-            const c = { x: r.width / 2, y: r.height / 2 }
-            const k = Math.max(0.05, v.k / 1.4)
-            userMoved.current = true
-            setView({ k, tx: c.x - ((c.x - v.tx) / v.k) * k, ty: c.y - ((c.y - v.ty) / v.k) * k })
-          }}
-        >
+        <button title="Zoom out" onClick={() => zoomBy(1 / 1.4)}>
           −
         </button>
         <button title="Fit" onClick={doFit}>

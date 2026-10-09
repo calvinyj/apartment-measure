@@ -112,7 +112,7 @@ export interface Settings {
   acShortfall: number
   /** paint colour of the inside faces of walls, as a hex code; single walls can override it */
   wallPaint: string
-  /** draw the plan image under the rooms (in Plan, Measure and 3D); untick it once an inaccurate plan only gets in the way */
+  /** draw the plan image under the rooms (in Plan, Measure, 2D and 3D); untick it once an inaccurate plan only gets in the way */
   showPlanImage: boolean
 }
 
