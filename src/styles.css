@@ -1219,6 +1219,37 @@ details.more summary {
   height: 18px;
 }
 
+.plug-badge {
+  display: inline-block;
+  min-width: 18px;
+  padding: 0 4px;
+  border: 1.5px solid #475569;
+  border-radius: 4px;
+  background: #fff;
+  color: #334155;
+  font-size: 0.78rem;
+  font-weight: 700;
+  line-height: 15px;
+  text-align: center;
+  vertical-align: 1px;
+}
+
+.plug-badge.new {
+  background: #dc2626;
+  border-color: #b91c1c;
+  color: #fff;
+}
+
+.plug-badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.nowrap {
+  white-space: nowrap;
+}
+
 @media (max-width: 820px) {
   .tool-palette .tool-label {
     display: none;

@@ -7,6 +7,7 @@ import { CompassBadge } from './Compass'
 import { FloorPlan, roomLabelBoxes, useFloorPlan } from './FloorPlan'
 import { LightLayer } from './Lights'
 import { PlanView } from './PlanView'
+import { placePlugs, PlugLayer } from './Plugs'
 
 export function Viewer2D() {
   const project = useStore((s) => s.project)
@@ -16,6 +17,7 @@ export function Viewer2D() {
   const [dims, setDims] = useState(true)
   const [lights, setLights] = useState(true)
   const [specs, setSpecs] = useState(true)
+  const [plugs, setPlugs] = useState(true)
   const [rotation, setRotation] = useState(0)
   const [resetKey, setResetKey] = useState(0)
   const plan = useFloorPlan(solved)
@@ -49,6 +51,11 @@ export function Viewer2D() {
         {lights && project.lights.some((l) => l.watt != null || l.temp != null) && (
           <label className="check small">
             <input type="checkbox" checked={specs} onChange={(e) => setSpecs(e.target.checked)} /> Watt &amp; temp
+          </label>
+        )}
+        {project.plugs.length > 0 && (
+          <label className="check small">
+            <input type="checkbox" checked={plugs} onChange={(e) => setPlugs(e.target.checked)} /> Plug points
           </label>
         )}
         <PlanImageToggle />
@@ -93,31 +100,36 @@ export function Viewer2D() {
           rotation={rotation}
           onRotate={setRotation}
         >
-          {(k, rot) => (
-            // The view works in plan image pixels (so the plan image lines up); the drawing is in mm.
-            <g transform={`scale(${1 / mmPerPx})`}>
-              <FloorPlan
-                plan={plan}
-                solved={solved}
-                ke={k / mmPerPx}
-                rot={rot}
-                labels={labels}
-                dims={dims}
-                unit={project.settings.inputUnit}
-              />
-              {lights && (
-                <LightLayer
-                  lights={project.lights}
-                  anchors={anchors}
+          {(k, rot) => {
+            const placed = plugs ? placePlugs(project.plugs, solved, anchors, k / mmPerPx, rot) : []
+            return (
+              // The view works in plan image pixels (so the plan image lines up); the drawing is in mm.
+              <g transform={`scale(${1 / mmPerPx})`}>
+                <FloorPlan
+                  plan={plan}
+                  solved={solved}
                   ke={k / mmPerPx}
                   rot={rot}
-                  specs={specs}
-                  avoid={labels ? roomLabelBoxes(plan, k / mmPerPx) : []}
-                  outlines={outlines}
+                  labels={labels}
+                  dims={dims}
+                  unit={project.settings.inputUnit}
+                  avoid={placed.map((x) => x.box)}
                 />
-              )}
-            </g>
-          )}
+                {lights && (
+                  <LightLayer
+                    lights={project.lights}
+                    anchors={anchors}
+                    ke={k / mmPerPx}
+                    rot={rot}
+                    specs={specs}
+                    avoid={[...(labels ? roomLabelBoxes(plan, k / mmPerPx) : []), ...placed.map((x) => x.box)]}
+                    outlines={outlines}
+                  />
+                )}
+                <PlugLayer placed={placed} ke={k / mmPerPx} rot={rot} />
+              </g>
+            )
+          }}
         </PlanView>
       </div>
     </div>

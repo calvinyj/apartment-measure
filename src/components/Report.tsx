@@ -2,11 +2,13 @@ import { useState } from 'react'
 import { acZones, hpLabel, type AcZone } from '../ac'
 import { formatFacing, roomFacing } from '../geometry/facing'
 import { FAN_SIZES, fixtureList, formatWatts, TUBE_SIZES, type FixtureRow } from '../geometry/lights'
+import { bySize, plugSchedule, type PlugTally } from '../geometry/plugs'
 import { downloadFile, useStore } from '../store'
 import { lightKindInfo, roomTypeInfo, type LengthUnit } from '../types'
 import { formatArea, formatLength, formatSqft, fmtInt, M2_TO_SQFT, m2 } from '../units'
 import { useSolved } from './common'
 import { LightIcon } from './Lights'
+import { PlugBadge } from './Plugs'
 
 const pct = (x: number) => `${x >= 0 ? '+' : ''}${(x * 100).toFixed(1)}%`
 const installedLabel = (z: AcZone) => z.installed.map((u) => hpLabel(u.hp)).join(' + ')
@@ -37,6 +39,23 @@ const fixtureRuns = (f: FixtureRow) =>
 const fixtureRooms = (f: FixtureRow) =>
   f.rooms.map((r) => (r.count > 1 ? `${r.room.name} ×${r.count}` : r.room.name)).join(', ')
 
+const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? '' : 's'}`
+/** "3 points, 6 sockets" */
+const tallyLabel = (t: PlugTally) => `${plural(t.points, 'point')}, ${plural(t.sockets, 'socket')}`
+const addTally = (a: PlugTally, b: PlugTally) => ({ points: a.points + b.points, sockets: a.sockets + b.sockets })
+
+/** Each plug point as its badge. */
+function PlugBadges({ counts, existing }: { counts: number[]; existing: boolean }) {
+  if (!counts.length) return <span className="muted">–</span>
+  return (
+    <span className="plug-badges">
+      {counts.map((c, i) => (
+        <PlugBadge key={i} count={c} existing={existing} />
+      ))}
+    </span>
+  )
+}
+
 export function Report() {
   const project = useStore((s) => s.project)
   const setAdvertised = useStore((s) => s.setAdvertised)
@@ -66,6 +85,12 @@ export function Report() {
   // A + where some have no power set, so the total is at least this.
   const unrated = fixtures.some((f) => f.watt == null)
   const unit = settings.inputUnit
+  const plugRows = plugSchedule(project.rooms, project.plugs)
+  const none = { points: 0, sockets: 0 }
+  const plugsExisting = plugRows.reduce((t, r) => addTally(t, r.existing), none)
+  const plugsToAdd = plugRows.reduce((t, r) => addTally(t, r.toAdd), none)
+  // The points to add by how many sockets each has, for the electrician's quote.
+  const toAddBySize = bySize(plugRows.flatMap((r) => r.toAddCounts))
 
   const exportCsv = () => {
     const rows = [
@@ -109,6 +134,23 @@ export function Report() {
               fixtureRooms(f),
               f.watt == null ? '' : Math.round(f.watts),
             ]),
+          ]
+        : []),
+      ...(plugRows.length
+        ? [
+            [],
+            ['Room', 'Existing plug points', 'Existing sockets', 'New plug points', 'New sockets'],
+            ...plugRows.map((r) => [
+              r.room.name,
+              r.existing.points,
+              r.existing.sockets,
+              r.toAdd.points,
+              r.toAdd.sockets,
+            ]),
+            ['Total', plugsExisting.points, plugsExisting.sockets, plugsToAdd.points, plugsToAdd.sockets],
+            ...(toAddBySize.length
+              ? [['New plug points by size', toAddBySize.map(([c, n]) => `${n} × ${plural(c, 'socket')}`).join(', ')]]
+              : []),
           ]
         : []),
     ]
@@ -345,7 +387,7 @@ export function Report() {
           <p className="muted">
             No lights or fans yet. Place them on the{' '}
             <button className="link" onClick={() => setTab('lighting')}>
-              Lighting &amp; fan
+              Electrical
             </button>{' '}
             tab.
           </p>
@@ -402,9 +444,72 @@ export function Report() {
               {unrated && fixtureWatts > 0 && ' + Some have no power set yet, so the total is at least this.'} Set
               models and settings on the{' '}
               <button className="link" onClick={() => setTab('lighting')}>
-                Lighting &amp; fan
+                Electrical
               </button>{' '}
               tab.
+            </p>
+          </>
+        )}
+      </section>
+
+      <section className="card">
+        <h3>Plug points</h3>
+        {plugRows.length === 0 ? (
+          <p className="muted">
+            No plug points yet. Mark the ones already there and plan new ones on the{' '}
+            <button className="link" onClick={() => setTab('lighting')}>
+              Electrical
+            </button>{' '}
+            tab.
+          </p>
+        ) : (
+          <>
+            <div className="table-wrap">
+              <table className="table">
+                <thead>
+                  <tr>
+                    <th>Room</th>
+                    <th>Existing</th>
+                    <th>New</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {plugRows.map((r) => (
+                    <tr key={r.room.id}>
+                      <td>{r.room.name}</td>
+                      <td>
+                        <PlugBadges counts={r.existingCounts} existing />
+                      </td>
+                      <td>
+                        <PlugBadges counts={r.toAddCounts} existing={false} />
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+                <tfoot>
+                  <tr>
+                    <td>Total</td>
+                    <td>{plugsExisting.points ? tallyLabel(plugsExisting) : <span className="muted">–</span>}</td>
+                    <td>{plugsToAdd.points ? tallyLabel(plugsToAdd) : <span className="muted">–</span>}</td>
+                  </tr>
+                </tfoot>
+              </table>
+            </div>
+            <p className="muted small">
+              Each badge is one point on the wall, with how many sockets it has (2 for a twin socket).
+              {toAddBySize.length > 0 && (
+                <>
+                  {' '}
+                  New points by size:{' '}
+                  {toAddBySize.map(([count, n], i) => (
+                    <span key={count} className="nowrap">
+                      {i > 0 && ', '}
+                      {n} × <PlugBadge count={count} existing={false} />
+                    </span>
+                  ))}
+                  .
+                </>
+              )}
             </p>
           </>
         )}

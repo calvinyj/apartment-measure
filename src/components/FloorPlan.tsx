@@ -88,9 +88,17 @@ const labelSize = (l: RoomLabel, fs: number) => ({
   hh: 1.2 * fs,
 })
 
+/** Something on the plan for wall lengths to keep off: centred on c, half sizes upright on screen, in mm. */
+interface Obstacle {
+  c: Vec2
+  hw: number
+  hh: number
+}
+
 /**
  * One length per wall, just inside the room: as measured, or the worked-out length (≈) for a
- * wall that wasn't. `avoid` is the room's label (with its size), which lengths make way for.
+ * wall that wasn't. It slides along the wall off anything in `avoid` (the room's label, plug
+ * points), or is left out where there's no room for it.
  */
 function WallDims({
   r,
@@ -103,7 +111,7 @@ function WallDims({
   ke: number
   rot: number
   unit: LengthUnit
-  avoid: (RoomLabel & { hw: number; hh: number }) | null
+  avoid: Obstacle[]
 }) {
   const fs = 11 / ke
   return (
@@ -126,18 +134,25 @@ function WallDims({
         const tw = text.length * fs * 0.6
         if (L < tw + fs) return null
         const d = norm(sub(b, a))
-        const p = add(lerp(a, b, 0.5), scale(outward(d), -fs))
         const angle = Math.atan2(d.y, d.x) / RAD
         const onScreen = normDeg(angle + rot)
-        if (avoid) {
-          // The label stays upright on screen, so measure its extent along and across this wall.
-          const cos = Math.abs(Math.cos(onScreen * RAD))
-          const sin = Math.abs(Math.sin(onScreen * RAD))
-          const off = sub(avoid.c, p)
-          const along = Math.abs(dot(off, d)) < tw / 2 + avoid.hw * cos + avoid.hh * sin
-          const across = Math.abs(dot(off, outward(d))) < fs / 2 + avoid.hw * sin + avoid.hh * cos
-          if (along && across) return null
+        // What it keeps off stays upright on screen, so measure its extent along and across this wall.
+        const cos = Math.abs(Math.cos(onScreen * RAD))
+        const sin = Math.abs(Math.sin(onScreen * RAD))
+        const covers = (q: Vec2) =>
+          avoid.some((o) => {
+            const off = sub(o.c, q)
+            const along = Math.abs(dot(off, d)) < tw / 2 + o.hw * cos + o.hh * sin
+            const across = Math.abs(dot(off, outward(d))) < fs / 2 + o.hw * sin + o.hh * cos
+            return along && across
+          })
+        // The middle of the wall, or as near it as is clear while the length still fits on the wall.
+        const mid = add(lerp(a, b, 0.5), scale(outward(d), -fs))
+        let p: Vec2 | null = null
+        for (let s = 0; s <= (L - tw - fs) / 2 && !p; s += fs / 2) {
+          p = (s ? [add(mid, scale(d, s)), add(mid, scale(d, -s))] : [mid]).find((q) => !covers(q)) ?? null
         }
+        if (!p) return null
         // Read from the bottom or the right of the screen, however the view is turned.
         const upright = onScreen >= 90 && onScreen < 270 ? angle + 180 : angle
         return (
@@ -204,7 +219,8 @@ export function useFloorPlan(solved: Solved): FloorPlanData | null {
 
 /**
  * Floors, walls cut at CUT (windows framed, doors left open), and optionally room labels and
- * wall lengths. Drawn in mm; `ke` is screen px per mm and `rot` the view's rotation.
+ * wall lengths, which keep off `avoid` (e.g. plug points). Drawn in mm; `ke` is screen px per mm
+ * and `rot` the view's rotation.
  */
 export function FloorPlan({
   plan,
@@ -214,6 +230,7 @@ export function FloorPlan({
   labels,
   dims,
   unit,
+  avoid = [],
 }: {
   plan: FloorPlanData
   solved: Solved
@@ -222,6 +239,7 @@ export function FloorPlan({
   labels: boolean
   dims: boolean
   unit: LengthUnit
+  avoid?: Obstacle[]
 }) {
   const fs = LABEL_PX / ke
   const { walls } = plan
@@ -281,7 +299,7 @@ export function FloorPlan({
               ke={ke}
               rot={rot}
               unit={unit}
-              avoid={labels ? { ...l, ...labelSize(l, fs) } : null}
+              avoid={labels ? [{ c: l.c, ...labelSize(l, fs) }, ...avoid] : avoid}
             />
           )
         })}

@@ -9,7 +9,7 @@ const EYEBALL = '#1f2933'
 const PENDANT = { fill: '#f7d4cc', stroke: '#9b4434' }
 const STRIP = '#0f9d6b'
 const FAN = { fill: '#cbd5e1', stroke: '#475569' }
-const ACCENT = '#2563eb'
+export const ACCENT = '#2563eb'
 
 const thin = { strokeWidth: 1.5, vectorEffect: 'non-scaling-stroke' } as const
 const RAD = Math.PI / 180
@@ -155,7 +155,7 @@ const spanning = (pts: Vec2[], pad: number): Box => ({
 })
 
 /** p turned about the origin by deg, clockwise on screen (as SVG's rotate). */
-function turn(p: Vec2, deg: number): Vec2 {
+export function turn(p: Vec2, deg: number): Vec2 {
   const cos = Math.cos(deg * RAD)
   const sin = Math.sin(deg * RAD)
   return { x: p.x * cos - p.y * sin, y: p.x * sin + p.y * cos }

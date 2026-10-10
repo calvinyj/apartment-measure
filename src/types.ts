@@ -133,6 +133,20 @@ export interface Light {
   model: string
 }
 
+/** A plug point (power socket outlet) on a wall, already there or one to add. */
+export interface PlugPoint {
+  id: string
+  /** the room whose wall it's on */
+  roomId: string
+  /** in mm from the centre of the room's measured outline; it's drawn on the room's wall nearest this */
+  x: number
+  y: number
+  /** sockets at this point, e.g. 2 for a twin socket */
+  count: number
+  /** already there, rather than one to add */
+  existing: boolean
+}
+
 export interface Calibration {
   a: Vec2
   b: Vec2
@@ -199,4 +213,5 @@ export interface Project {
   /** where north points on the plan, in degrees clockwise from the top of the image; null = not set */
   north: number | null
   lights: Light[]
+  plugs: PlugPoint[]
 }
