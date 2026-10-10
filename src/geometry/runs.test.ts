@@ -56,6 +56,7 @@ describe('a straight wall facing different neighbours along its length', () => {
   const project: Project = {
     version: 3,
     north: null,
+    lights: [],
     name: 't',
     image: null,
     calibration: { a: { x: 0, y: 0 }, b: { x: 100, y: 0 }, mm: 1000 },

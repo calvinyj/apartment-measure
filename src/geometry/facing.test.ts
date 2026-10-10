@@ -13,6 +13,7 @@ function project(rooms: Room[], north: number | null): Project {
   return {
     version: 3,
     north,
+    lights: [],
     name: 't',
     image: null,
     // 1 px = 10 mm

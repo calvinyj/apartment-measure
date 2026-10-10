@@ -19,6 +19,7 @@ describe('roomWallPieces', () => {
   const project: Project = {
     version: 3,
     north: null,
+    lights: [],
     name: 't',
     image: null,
     calibration: { a: { x: 0, y: 0 }, b: { x: 100, y: 0 }, mm: 1000 },
@@ -89,6 +90,7 @@ describe('a side that is partly open and partly wall', () => {
   const project: Project = {
     version: 3,
     north: null,
+    lights: [],
     name: 't',
     image: null,
     calibration: { a: { x: 0, y: 0 }, b: { x: 100, y: 0 }, mm: 1000 },

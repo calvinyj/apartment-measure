@@ -100,6 +100,7 @@ describe('solveProject', () => {
   const project: Project = {
     version: 3,
     north: null,
+    lights: [],
     name: 't',
     image: null,
     calibration: { a: { x: 0, y: 0 }, b: { x: 100, y: 0 }, mm: 1000 },
@@ -136,6 +137,7 @@ describe('rooms traced on wall centre lines', () => {
   const project: Project = {
     version: 3,
     north: null,
+    lights: [],
     name: 'c',
     image: null,
     calibration: { a: { x: 0, y: 0 }, b: { x: 100, y: 0 }, mm: 1000 },
@@ -182,6 +184,7 @@ describe('a straight wall shared by several rooms', () => {
   const project: Project = {
     version: 3,
     north: null,
+    lights: [],
     name: 'flush',
     image: null,
     calibration: { a: { x: 0, y: 0 }, b: { x: 100, y: 0 }, mm: 1000 },

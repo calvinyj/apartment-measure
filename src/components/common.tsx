@@ -7,7 +7,8 @@ import { parseLength, toUnit } from '../units'
 
 export function useSolved() {
   const project = useStore((s) => s.project)
-  return useMemo(() => solveProject(project), [project])
+  // Only what the solver reads, so moving a light doesn't re-solve the layout.
+  return useMemo(() => solveProject(project), [project.rooms, project.calibration, project.settings, project.north])
 }
 
 const DIGITS: Record<LengthUnit, number> = { mm: 0, cm: 1, m: 3 }
@@ -71,6 +72,62 @@ export function LengthInput({
         }}
         onKeyDown={(e: KeyboardEvent) => {
           if (e.key === 'Enter') onEnter?.()
+        }}
+      />
+      <span className="unit">{unit}</span>
+    </div>
+  )
+}
+
+/** A plain number with its unit after it, e.g. watts; blank is null. */
+export function NumberInput({
+  value,
+  onChange,
+  unit,
+  list,
+}: {
+  value: number | null
+  onChange: (n: number | null) => void
+  unit: string
+  /** id of a <datalist> of usual values */
+  list?: string
+}) {
+  const show = (n: number | null) => (n == null ? '' : String(n))
+  const [text, setText] = useState(show(value))
+  const [bad, setBad] = useState(false)
+  const focused = useRef(false)
+
+  useEffect(() => {
+    if (!focused.current) setText(show(value))
+  }, [value])
+
+  return (
+    <div className={`len-input${bad ? ' bad' : ''}`}>
+      <input
+        inputMode="decimal"
+        autoComplete="off"
+        list={list}
+        value={text}
+        onFocus={(e) => {
+          focused.current = true
+          e.target.select()
+        }}
+        onBlur={() => {
+          focused.current = false
+          setBad(false)
+          setText(show(value))
+        }}
+        onChange={(e) => {
+          const t = e.target.value
+          setText(t)
+          if (t.trim() === '') {
+            setBad(false)
+            onChange(null)
+            return
+          }
+          const n = /^\d*\.?\d+$|^\d+\.$/.test(t.trim()) ? parseFloat(t) : NaN
+          setBad(!(n > 0))
+          if (n > 0) onChange(n)
         }}
       />
       <span className="unit">{unit}</span>

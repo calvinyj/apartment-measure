@@ -13,6 +13,7 @@ function zones(rooms: Room[]) {
   const project: Project = {
     version: 3,
     north: null,
+    lights: [],
     name: 't',
     image: null,
     // 1 px = 10 mm
