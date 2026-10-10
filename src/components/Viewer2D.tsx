@@ -2,12 +2,13 @@ import { useMemo, useState } from 'react'
 import { normDeg } from '../geometry/facing'
 import { roomAnchors } from '../geometry/lights'
 import { useStore } from '../store'
+import { LIGHT_KINDS, type Light, type PlugPoint } from '../types'
 import { PlanImageToggle, useSolved } from './common'
 import { CompassBadge } from './Compass'
 import { FloorPlan, roomLabelBoxes, useFloorPlan } from './FloorPlan'
-import { lightBoxes, LightLayer } from './Lights'
+import { LightIcon, lightBoxes, LightLayer } from './Lights'
 import { PlanView } from './PlanView'
-import { placePlugs, plugBoxes, PlugLayer } from './Plugs'
+import { placePlugs, plugBoxes, PlugIcon, PlugLayer } from './Plugs'
 
 export function Viewer2D() {
   const project = useStore((s) => s.project)
@@ -99,6 +100,7 @@ export function Viewer2D() {
           fitKey={String(resetKey)}
           rotation={rotation}
           onRotate={setRotation}
+          overlay={<Legend lights={lights ? project.lights : []} plugs={plugs ? project.plugs : []} />}
         >
           {(k, rot) => {
             const ke = k / mmPerPx
@@ -139,6 +141,50 @@ export function Viewer2D() {
           }}
         </PlanView>
       </div>
+    </div>
+  )
+}
+
+/**
+ * What the symbols on the plan are: each kind of light and fan, and plug points, that's shown. It
+ * starts folded on a narrow screen, where it would cover much of the plan; open, the plan fits beside it.
+ */
+function Legend({ lights, plugs }: { lights: Light[]; plugs: PlugPoint[] }) {
+  const [open, setOpen] = useState(() => window.matchMedia('(min-width: 700px)').matches)
+  const kinds = LIGHT_KINDS.filter((k) => lights.some((l) => l.kind === k.value))
+  const existing = plugs.some((p) => p.existing)
+  const added = plugs.some((p) => !p.existing)
+  if (!kinds.length && !plugs.length) return null
+  const toggle = (
+    <button className="legend-toggle" aria-expanded={open} onClick={() => setOpen(!open)}>
+      Legend <span aria-hidden>{open ? '▾' : '▸'}</span>
+    </button>
+  )
+  if (!open) return <div className="plan-legend folded">{toggle}</div>
+  return (
+    <div className="plan-legend" data-fit-clear>
+      {toggle}
+      <ul>
+        {kinds.map((k) => (
+          <li key={k.value}>
+            <LightIcon kind={k.value} />
+            {k.label}
+          </li>
+        ))}
+        {existing && (
+          <li>
+            <PlugIcon existing />
+            Existing plug point
+          </li>
+        )}
+        {added && (
+          <li>
+            <PlugIcon existing={false} />
+            New plug point
+          </li>
+        )}
+      </ul>
+      {plugs.length > 0 && <p className="muted">The number is how many sockets.</p>}
     </div>
   )
 }

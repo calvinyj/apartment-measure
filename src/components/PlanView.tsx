@@ -36,6 +36,8 @@ interface Props {
   /** lets the user turn the view: two-finger twist, or drag with the right mouse button (or Shift) */
   onRotate?: (deg: number) => void
   children?: (k: number, rotation: number) => ReactNode
+  /** floats over the plan, e.g. a legend; an element in it marked `data-fit-clear` on the left is kept clear when fitting */
+  overlay?: ReactNode
 }
 
 interface View {
@@ -94,6 +96,7 @@ export function PlanView({
   rotation = 0,
   onRotate,
   children,
+  overlay,
 }: Props) {
   const svgRef = useRef<SVGSVGElement>(null)
   const [view, setView] = useState<View>({ k: 1, tx: 0, ty: 0, a: 0 })
@@ -119,11 +122,15 @@ export function PlanView({
     if (!svg || !fit) return
     const { width, height } = svg.getBoundingClientRect()
     if (width === 0 || height === 0) return
+    // Beside anything floating on the left (a legend), unless it takes too much of the width to leave room.
+    const clear = svg.parentElement?.querySelector('[data-fit-clear]')?.getBoundingClientRect()
+    const left = clear && clear.width < width * 0.35 ? clear.right - svg.getBoundingClientRect().left : 0
     // Fit the box as it lies once turned.
     const c = Math.abs(Math.cos(rotation * RAD))
     const sn = Math.abs(Math.sin(rotation * RAD))
-    const k = Math.min(width / (fit.w * c + fit.h * sn), height / (fit.w * sn + fit.h * c)) * 0.92
-    commit(place({ x: fit.minX + fit.w / 2, y: fit.minY + fit.h / 2 }, { x: width / 2, y: height / 2 }, k, rotation))
+    const k = Math.min((width - left) / (fit.w * c + fit.h * sn), height / (fit.w * sn + fit.h * c)) * 0.92
+    const mid = { x: left + (width - left) / 2, y: height / 2 }
+    commit(place({ x: fit.minX + fit.w / 2, y: fit.minY + fit.h / 2 }, mid, k, rotation))
     userMoved.current = false
   }, [fit?.minX, fit?.minY, fit?.w, fit?.h, rotation])
 
@@ -302,6 +309,7 @@ export function PlanView({
           {children?.(view.k, view.a)}
         </g>
       </svg>
+      {overlay}
       <div className="zoom-buttons">
         <button title="Zoom in" onClick={() => zoomBy(1.4)}>
           +
