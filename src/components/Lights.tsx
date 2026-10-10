@@ -189,6 +189,20 @@ export interface LabelBox {
   hh: number
 }
 
+/** Where the lights' symbols are, for labels to keep off; a fan's blades and sweep don't count. */
+export function lightBoxes(lights: Light[], anchors: Map<string, Vec2>, ke: number, rot = 0): LabelBox[] {
+  return lights.flatMap((l) => {
+    const c = lightCentre(anchors, l)
+    if (!c) return []
+    const { body, arrow } = symbolBoxes(l, c, ke, rot)
+    return (arrow ? [body, arrow] : [body]).map((b) => ({
+      c: turn({ x: (b.x0 + b.x1) / 2, y: (b.y0 + b.y1) / 2 }, -rot),
+      hw: (b.x1 - b.x0) / 2,
+      hh: (b.y1 - b.y0) / 2,
+    }))
+  })
+}
+
 const tempClass = (t: LightTemp) => (t === 'tri' ? '' : t <= 3000 ? ' warm' : t >= 5000 ? ' daylight' : ' cool')
 
 /** What a label costs where it covers something; the cheapest spot wins, in the order they're tried. */

@@ -43,7 +43,7 @@ import {
 import { fmtInt, formatArea, formatLength } from '../units'
 import { Field, LengthInput, NumberInput, PlanImageToggle, Segmented, useSolved } from './common'
 import { FloorPlan, roomLabelBoxes, useFloorPlan } from './FloorPlan'
-import { LightIcon, LightLayer } from './Lights'
+import { LightIcon, lightBoxes, LightLayer } from './Lights'
 import { PlanView, type PointerInfo } from './PlanView'
 import { placePlugs, PlugBadge, plugBoxes, PlugIcon, PlugLayer } from './Plugs'
 
@@ -329,7 +329,11 @@ export function LightingPlanner() {
             {(k) => {
               const ke = k / mmPerPx
               keRef.current = ke
-              const plugs = placePlugs(project.plugs, solved, anchors, ke)
+              const roomLabels = labels ? roomLabelBoxes(plan, ke) : []
+              const plugs = placePlugs(project.plugs, solved, anchors, ke, 0, [
+                ...roomLabels,
+                ...lightBoxes(project.lights, anchors, ke),
+              ])
               return (
                 <g transform={`scale(${1 / mmPerPx})`}>
                   <FloorPlan
@@ -376,7 +380,7 @@ export function LightingPlanner() {
                     anchors={anchors}
                     ke={ke}
                     specs={specs}
-                    avoid={[...(labels ? roomLabelBoxes(plan, ke) : []), ...plugBoxes(plugs)]}
+                    avoid={[...roomLabels, ...plugBoxes(plugs)]}
                     outlines={outlines}
                     selectedId={selectedId}
                     interactive
@@ -555,12 +559,12 @@ function PlugInspector({
       </Field>
       <Field
         label="Remark"
-        hint="What it’s for, so you don’t forget. It’s shown beside it on the plan and in the report."
+        hint="What it’s for, so you don’t forget (up to 25 characters). It’s shown beside it on the plan and in the report."
       >
         <input
           value={plug.note}
           placeholder="e.g. TV, oven"
-          maxLength={30}
+          maxLength={25}
           list="plug-uses"
           onChange={(e) => updatePlug(plug.id, { note: e.target.value })}
         />

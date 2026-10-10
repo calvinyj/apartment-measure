@@ -5,7 +5,7 @@ import { useStore } from '../store'
 import { PlanImageToggle, useSolved } from './common'
 import { CompassBadge } from './Compass'
 import { FloorPlan, roomLabelBoxes, useFloorPlan } from './FloorPlan'
-import { LightLayer } from './Lights'
+import { lightBoxes, LightLayer } from './Lights'
 import { PlanView } from './PlanView'
 import { placePlugs, plugBoxes, PlugLayer } from './Plugs'
 
@@ -101,14 +101,21 @@ export function Viewer2D() {
           onRotate={setRotation}
         >
           {(k, rot) => {
-            const placed = plugs ? placePlugs(project.plugs, solved, anchors, k / mmPerPx, rot) : []
+            const ke = k / mmPerPx
+            const roomLabels = labels ? roomLabelBoxes(plan, ke) : []
+            const placed = plugs
+              ? placePlugs(project.plugs, solved, anchors, ke, rot, [
+                  ...roomLabels,
+                  ...(lights ? lightBoxes(project.lights, anchors, ke, rot) : []),
+                ])
+              : []
             return (
               // The view works in plan image pixels (so the plan image lines up); the drawing is in mm.
               <g transform={`scale(${1 / mmPerPx})`}>
                 <FloorPlan
                   plan={plan}
                   solved={solved}
-                  ke={k / mmPerPx}
+                  ke={ke}
                   rot={rot}
                   labels={labels}
                   dims={dims}
@@ -119,14 +126,14 @@ export function Viewer2D() {
                   <LightLayer
                     lights={project.lights}
                     anchors={anchors}
-                    ke={k / mmPerPx}
+                    ke={ke}
                     rot={rot}
                     specs={specs}
-                    avoid={[...(labels ? roomLabelBoxes(plan, k / mmPerPx) : []), ...plugBoxes(placed)]}
+                    avoid={[...roomLabels, ...plugBoxes(placed)]}
                     outlines={outlines}
                   />
                 )}
-                <PlugLayer placed={placed} ke={k / mmPerPx} rot={rot} />
+                <PlugLayer placed={placed} ke={ke} rot={rot} />
               </g>
             )
           }}
