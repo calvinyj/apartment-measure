@@ -7,7 +7,7 @@ import { CompassBadge } from './Compass'
 import { FloorPlan, roomLabelBoxes, useFloorPlan } from './FloorPlan'
 import { LightLayer } from './Lights'
 import { PlanView } from './PlanView'
-import { placePlugs, PlugLayer } from './Plugs'
+import { placePlugs, plugBoxes, PlugLayer } from './Plugs'
 
 export function Viewer2D() {
   const project = useStore((s) => s.project)
@@ -113,7 +113,7 @@ export function Viewer2D() {
                   labels={labels}
                   dims={dims}
                   unit={project.settings.inputUnit}
-                  avoid={placed.map((x) => x.box)}
+                  avoid={plugBoxes(placed)}
                 />
                 {lights && (
                   <LightLayer
@@ -122,7 +122,7 @@ export function Viewer2D() {
                     ke={k / mmPerPx}
                     rot={rot}
                     specs={specs}
-                    avoid={[...(labels ? roomLabelBoxes(plan, k / mmPerPx) : []), ...placed.map((x) => x.box)]}
+                    avoid={[...(labels ? roomLabelBoxes(plan, k / mmPerPx) : []), ...plugBoxes(placed)]}
                     outlines={outlines}
                   />
                 )}

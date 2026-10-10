@@ -63,21 +63,24 @@ export interface PlugRow {
   room: Room
   existing: PlugTally
   toAdd: PlugTally
-  /** the sockets at each point, in the order placed */
-  existingCounts: number[]
-  toAddCounts: number[]
+  /** the points themselves, in the order placed */
+  existingPlugs: PlugPoint[]
+  toAddPlugs: PlugPoint[]
 }
 
-const tally = (counts: number[]): PlugTally => ({ points: counts.length, sockets: counts.reduce((a, b) => a + b, 0) })
+const tally = (plugs: PlugPoint[]): PlugTally => ({
+  points: plugs.length,
+  sockets: plugs.reduce((sum, p) => sum + p.count, 0),
+})
 
 /** Plug points counted room by room (rooms with none are left out), in the rooms' order. */
 export function plugSchedule(rooms: Room[], plugs: PlugPoint[]): PlugRow[] {
   return rooms.flatMap((room) => {
     const mine = plugs.filter((p) => p.roomId === room.id)
     if (!mine.length) return []
-    const existingCounts = mine.filter((p) => p.existing).map((p) => p.count)
-    const toAddCounts = mine.filter((p) => !p.existing).map((p) => p.count)
-    return [{ room, existing: tally(existingCounts), toAdd: tally(toAddCounts), existingCounts, toAddCounts }]
+    const existingPlugs = mine.filter((p) => p.existing)
+    const toAddPlugs = mine.filter((p) => !p.existing)
+    return [{ room, existing: tally(existingPlugs), toAdd: tally(toAddPlugs), existingPlugs, toAddPlugs }]
   })
 }
 

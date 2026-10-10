@@ -4,7 +4,7 @@ import { formatFacing, roomFacing } from '../geometry/facing'
 import { FAN_SIZES, fixtureList, formatWatts, TUBE_SIZES, type FixtureRow } from '../geometry/lights'
 import { bySize, plugSchedule, type PlugTally } from '../geometry/plugs'
 import { downloadFile, useStore } from '../store'
-import { lightKindInfo, roomTypeInfo, type LengthUnit } from '../types'
+import { lightKindInfo, roomTypeInfo, type LengthUnit, type PlugPoint } from '../types'
 import { formatArea, formatLength, formatSqft, fmtInt, M2_TO_SQFT, m2 } from '../units'
 import { useSolved } from './common'
 import { LightIcon } from './Lights'
@@ -44,17 +44,27 @@ const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? '' : 's'}`
 const tallyLabel = (t: PlugTally) => `${plural(t.points, 'point')}, ${plural(t.sockets, 'socket')}`
 const addTally = (a: PlugTally, b: PlugTally) => ({ points: a.points + b.points, sockets: a.sockets + b.sockets })
 
-/** Each plug point as its badge. */
-function PlugBadges({ counts, existing }: { counts: number[]; existing: boolean }) {
-  if (!counts.length) return <span className="muted">–</span>
+/** Each plug point as its badge, with its remark. */
+function PlugBadges({ plugs }: { plugs: PlugPoint[] }) {
+  if (!plugs.length) return <span className="muted">–</span>
   return (
     <span className="plug-badges">
-      {counts.map((c, i) => (
-        <PlugBadge key={i} count={c} existing={existing} />
+      {plugs.map((p) => (
+        <span key={p.id} className="plug-item">
+          <PlugBadge count={p.count} existing={p.existing} />
+          {p.note.trim() && ` ${p.note.trim()}`}
+        </span>
       ))}
     </span>
   )
 }
+
+/** A room's remarks for the CSV, e.g. "TV (new, 2 sockets); Fridge (existing, 1 socket)". */
+const plugRemarks = (plugs: PlugPoint[]) =>
+  plugs
+    .filter((p) => p.note.trim())
+    .map((p) => `${p.note.trim()} (${p.existing ? 'existing' : 'new'}, ${plural(p.count, 'socket')})`)
+    .join('; ')
 
 export function Report() {
   const project = useStore((s) => s.project)
@@ -90,7 +100,7 @@ export function Report() {
   const plugsExisting = plugRows.reduce((t, r) => addTally(t, r.existing), none)
   const plugsToAdd = plugRows.reduce((t, r) => addTally(t, r.toAdd), none)
   // The points to add by how many sockets each has, for the electrician's quote.
-  const toAddBySize = bySize(plugRows.flatMap((r) => r.toAddCounts))
+  const toAddBySize = bySize(plugRows.flatMap((r) => r.toAddPlugs.map((p) => p.count)))
 
   const exportCsv = () => {
     const rows = [
@@ -139,13 +149,14 @@ export function Report() {
       ...(plugRows.length
         ? [
             [],
-            ['Room', 'Existing plug points', 'Existing sockets', 'New plug points', 'New sockets'],
+            ['Room', 'Existing plug points', 'Existing sockets', 'New plug points', 'New sockets', 'Remarks'],
             ...plugRows.map((r) => [
               r.room.name,
               r.existing.points,
               r.existing.sockets,
               r.toAdd.points,
               r.toAdd.sockets,
+              plugRemarks([...r.existingPlugs, ...r.toAddPlugs]),
             ]),
             ['Total', plugsExisting.points, plugsExisting.sockets, plugsToAdd.points, plugsToAdd.sockets],
             ...(toAddBySize.length
@@ -478,10 +489,10 @@ export function Report() {
                     <tr key={r.room.id}>
                       <td>{r.room.name}</td>
                       <td>
-                        <PlugBadges counts={r.existingCounts} existing />
+                        <PlugBadges plugs={r.existingPlugs} />
                       </td>
                       <td>
-                        <PlugBadges counts={r.toAddCounts} existing={false} />
+                        <PlugBadges plugs={r.toAddPlugs} />
                       </td>
                     </tr>
                   ))}
@@ -496,7 +507,7 @@ export function Report() {
               </table>
             </div>
             <p className="muted small">
-              Each badge is one point on the wall, with how many sockets it has (2 for a twin socket).
+              Each badge is one point on the wall, with how many sockets it has (2 for a twin socket) and its remark.
               {toAddBySize.length > 0 && (
                 <>
                   {' '}

@@ -45,7 +45,7 @@ import { Field, LengthInput, NumberInput, PlanImageToggle, Segmented, useSolved 
 import { FloorPlan, roomLabelBoxes, useFloorPlan } from './FloorPlan'
 import { LightIcon, LightLayer } from './Lights'
 import { PlanView, type PointerInfo } from './PlanView'
-import { placePlugs, PlugBadge, PlugIcon, PlugLayer } from './Plugs'
+import { placePlugs, PlugBadge, plugBoxes, PlugIcon, PlugLayer } from './Plugs'
 
 type PlugTool = 'plug-existing' | 'plug-new'
 type Tool = 'select' | LightKind | PlugTool
@@ -71,6 +71,24 @@ const PLUG_TOOLS: { value: PlugTool; label: string; name: string; existing: bool
 ]
 
 const SOCKETS = [1, 2, 3, 4, 5, 6]
+
+/** What plug points are often for, offered as you type a remark (after the ones already used). */
+const PLUG_USES = [
+  'TV',
+  'Fridge',
+  'Oven',
+  'Microwave',
+  'Hob',
+  'Cooker hood',
+  'Kettle',
+  'Washing machine',
+  'Dryer',
+  'Water heater',
+  'Bedside',
+  'Desk',
+  'Router',
+  'Vacuum',
+]
 
 const HINT: Record<LightKind, string> = {
   downlight: 'Fixed, pointing straight down.',
@@ -163,7 +181,7 @@ export function LightingPlanner() {
       if (!s) return setError('This room has no walls to put it on.')
       const count = project.plugs.at(-1)?.count ?? 1
       const at = offsetFrom(anchors.get(r.room.id)!, s.at)
-      return setSelectedId(addPlug({ roomId: r.room.id, ...at, count, existing: tool === 'plug-existing' }))
+      return setSelectedId(addPlug({ roomId: r.room.id, ...at, count, existing: tool === 'plug-existing', note: '' }))
     }
     if (!r) return setError('Tap inside a room to place it.')
     setSelectedId(addLight({ ...newLight(tool, r, anchors.get(r.room.id)!, p), ...specsFrom(project.lights, tool) }))
@@ -321,7 +339,7 @@ export function LightingPlanner() {
                     labels={labels}
                     dims={dims}
                     unit={project.settings.inputUnit}
-                    avoid={plugs.map((x) => x.box)}
+                    avoid={plugBoxes(plugs)}
                   />
                   {guides.x != null && (
                     <line
@@ -358,7 +376,7 @@ export function LightingPlanner() {
                     anchors={anchors}
                     ke={ke}
                     specs={specs}
-                    avoid={[...(labels ? roomLabelBoxes(plan, ke) : []), ...plugs.map((x) => x.box)]}
+                    avoid={[...(labels ? roomLabelBoxes(plan, ke) : []), ...plugBoxes(plugs)]}
                     outlines={outlines}
                     selectedId={selectedId}
                     interactive
@@ -506,7 +524,12 @@ function PlugInspector({
   onDelete: () => void
 }) {
   const unit = useStore((s) => s.project.settings.inputUnit)
+  const plugs = useStore((s) => s.project.plugs)
   const updatePlug = useStore((s) => s.updatePlug)
+  // Remarks already used, then the usual ones, each once whatever its case.
+  const uses = [...plugs.map((p) => p.note.trim()).filter(Boolean), ...PLUG_USES].filter(
+    (u, i, all) => all.findIndex((v) => v.toLowerCase() === u.toLowerCase()) === i,
+  )
   return (
     <div className="stack">
       <div className="row between">
@@ -529,6 +552,23 @@ function PlugInspector({
           options={SOCKETS.map((n) => ({ value: String(n), label: String(n) }))}
           onChange={(v) => updatePlug(plug.id, { count: Number(v) })}
         />
+      </Field>
+      <Field
+        label="Remark"
+        hint="What it’s for, so you don’t forget. It’s shown beside it on the plan and in the report."
+      >
+        <input
+          value={plug.note}
+          placeholder="e.g. TV, oven"
+          maxLength={30}
+          list="plug-uses"
+          onChange={(e) => updatePlug(plug.id, { note: e.target.value })}
+        />
+        <datalist id="plug-uses">
+          {uses.map((u) => (
+            <option key={u} value={u} />
+          ))}
+        </datalist>
       </Field>
       {doorway && (
         <div className="callout warn">It’s in a doorway, or an opening down to the floor. Drag it along the wall.</div>
@@ -919,7 +959,7 @@ function PlugSchedule() {
   const sum = (f: (r: (typeof rows)[number]) => number) => rows.reduce((a, r) => a + f(r), 0)
   const cell = (n: number, points: number) =>
     n ? <span title={`${points} point${points > 1 ? 's' : ''}`}>{n}</span> : <span className="muted">–</span>
-  const toAdd = bySize(rows.flatMap((r) => r.toAddCounts))
+  const toAdd = bySize(rows.flatMap((r) => r.toAddPlugs.map((p) => p.count)))
   return (
     <>
       <div className="table-wrap">

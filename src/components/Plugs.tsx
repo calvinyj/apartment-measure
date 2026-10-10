@@ -24,10 +24,27 @@ export function plugBadge(s: WallSpot, count: number, ke: number, rot = 0): Labe
   return { c: add(s.at, scale(inward, reach + 4 / ke)), hw, hh }
 }
 
+/** A remark's font size on screen, px. */
+const NOTE_PX = 10
+
+/**
+ * Where a plug point's remark goes, in mm: beside its badge on screen, to the right unless that's
+ * towards the wall (then to the left), so it reads like "[2] TV".
+ */
+function noteBox(s: WallSpot, badge: LabelBox, note: string, ke: number, rot: number): LabelBox {
+  const hw = (note.length * NOTE_PX * 0.6) / 2 / ke
+  const hh = (NOTE_PX * 1.1) / 2 / ke
+  const side = turn(scale(outward(s.dir), -1), rot).x < -0.5 ? -1 : 1
+  const q = turn(badge.c, rot)
+  return { c: turn({ x: q.x + side * (badge.hw + 3 / ke + hw), y: q.y }, -rot), hw, hh }
+}
+
 export interface PlacedPlug {
   p: PlugPoint
   s: WallSpot
   box: LabelBox
+  /** its remark's, if it has one */
+  note: LabelBox | null
 }
 
 /** Each plug point's spot on its wall and its badge, at this zoom and turn of the view; ones whose room is gone are left out. */
@@ -40,9 +57,24 @@ export function placePlugs(
 ): PlacedPlug[] {
   return plugs.flatMap((p) => {
     const s = plugSpot(solved, anchors, p)
-    return s ? [{ p, s, box: plugBadge(s, p.count, ke, rot) }] : []
+    if (!s) return []
+    const box = plugBadge(s, p.count, ke, rot)
+    const note = p.note.trim() ? noteBox(s, box, p.note.trim(), ke, rot) : null
+    return [{ p, s, box, note }]
   })
 }
+
+/** What the plug points cover on the plan, for other labels to keep off. */
+export const plugBoxes = (placed: PlacedPlug[]) => placed.flatMap((x) => (x.note ? [x.box, x.note] : [x.box]))
+
+/** An upright box at b (mm) on a view turned by `rot`, e.g. a bigger target for a finger. */
+const upright = (b: LabelBox, rot: number) => ({
+  x: b.c.x - b.hw,
+  y: b.c.y - b.hh,
+  width: b.hw * 2,
+  height: b.hh * 2,
+  transform: rot ? `rotate(${-rot} ${b.c.x} ${b.c.y})` : undefined,
+})
 
 /** One plug point: a mark on the wall where it is, and a badge with how many sockets it has. */
 function PlugSymbol({
@@ -140,15 +172,28 @@ export function PlugLayer({
           vectorEffect="non-scaling-stroke"
         />
       )}
-      {placed.map(({ p, s, box }) => (
+      {placed.map(({ p, s, box, note }) => (
         <g
           key={p.id}
           data-handle={interactive ? `p:${p.id}` : undefined}
           className={interactive ? 'handle' : undefined}
         >
           <PlugSymbol count={p.count} existing={p.existing} s={s} box={box} ke={ke} rot={rot} />
-          {/* A bigger target than the badge, for fingers. */}
+          {note && (
+            <text
+              x={note.c.x}
+              y={note.c.y + (NOTE_PX * 0.35) / ke}
+              fontSize={NOTE_PX / ke}
+              textAnchor="middle"
+              transform={rot ? `rotate(${-rot} ${note.c.x} ${note.c.y})` : undefined}
+              className="plan-label plug-note"
+            >
+              {p.note.trim()}
+            </text>
+          )}
+          {/* A bigger target than the badge, for fingers, and the remark can be tapped too. */}
           {interactive && <circle cx={box.c.x} cy={box.c.y} r={15 / ke} fill="transparent" />}
+          {interactive && note && <rect {...upright(note, rot)} fill="transparent" />}
         </g>
       ))}
     </g>

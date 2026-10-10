@@ -1243,7 +1243,15 @@ details.more summary {
 .plug-badges {
   display: flex;
   flex-wrap: wrap;
-  gap: 4px;
+  gap: 4px 10px;
+}
+
+.plug-item {
+  white-space: nowrap;
+}
+
+.plan-label.plug-note {
+  fill: #334155;
 }
 
 .nowrap {

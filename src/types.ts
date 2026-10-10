@@ -145,6 +145,8 @@ export interface PlugPoint {
   count: number
   /** already there, rather than one to add */
   existing: boolean
+  /** what it's for, e.g. "TV"; '' = not set */
+  note: string
 }
 
 export interface Calibration {

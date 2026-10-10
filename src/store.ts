@@ -57,7 +57,7 @@ export function normalizeProject(raw: unknown): Project {
           model: l.model ?? '',
         }))
       : [],
-    plugs: Array.isArray(p.plugs) ? p.plugs : [],
+    plugs: Array.isArray(p.plugs) ? p.plugs.map((x) => ({ ...x, note: x.note ?? '' })) : [],
     image: img ? { src: img.src ?? img.dataUrl ?? '', width: img.width, height: img.height } : null,
     settings: { ...DEFAULT_SETTINGS, ...p.settings },
   }

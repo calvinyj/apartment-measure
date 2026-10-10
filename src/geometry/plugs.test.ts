@@ -64,6 +64,7 @@ const plug = (patch: Partial<PlugPoint>): PlugPoint => ({
   y: 0,
   count: 2,
   existing: true,
+  note: '',
   ...patch,
 })
 
@@ -138,12 +139,9 @@ describe('plug points', () => {
       ],
     )
     expect(rows.map((r) => r.room.id)).toEqual(['a', 'c'])
-    expect(rows[0]).toMatchObject({
-      existing: { points: 2, sockets: 3 },
-      toAdd: { points: 1, sockets: 2 },
-      existingCounts: [2, 1],
-      toAddCounts: [2],
-    })
+    expect(rows[0]).toMatchObject({ existing: { points: 2, sockets: 3 }, toAdd: { points: 1, sockets: 2 } })
+    expect(rows[0].existingPlugs.map((p) => p.id)).toEqual(['1', '2'])
+    expect(rows[0].toAddPlugs.map((p) => p.id)).toEqual(['3'])
     expect(rows[1]).toMatchObject({ existing: { points: 0, sockets: 0 }, toAdd: { points: 1, sockets: 3 } })
     expect(bySize([2, 1, 2, 3, 2])).toEqual([
       [1, 1],
