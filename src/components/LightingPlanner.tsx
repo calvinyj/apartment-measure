@@ -26,8 +26,9 @@ import {
   tubesFor,
   wallDistances,
 } from '../geometry/lights'
+import { bySize, inDoorway, plugSchedule, plugSpot, wallSpot, type WallSpot } from '../geometry/plugs'
 import type { SolvedRoom } from '../geometry/solve'
-import { add, len, lerp, norm, outward, scale, sub } from '../geometry/vec'
+import { add, dist, len, lerp, norm, outward, scale, sub } from '../geometry/vec'
 import { useStore } from '../store'
 import {
   LIGHT_KINDS,
@@ -36,24 +37,58 @@ import {
   type LengthUnit,
   type Light,
   type LightKind,
+  type PlugPoint,
   type Vec2,
 } from '../types'
 import { fmtInt, formatArea, formatLength } from '../units'
 import { Field, LengthInput, NumberInput, PlanImageToggle, Segmented, useSolved } from './common'
 import { FloorPlan, roomLabelBoxes, useFloorPlan } from './FloorPlan'
-import { LightIcon, LightLayer } from './Lights'
+import { LightIcon, lightBoxes, LightLayer } from './Lights'
 import { PlanView, type PointerInfo } from './PlanView'
+import { placePlugs, PlugBadge, plugBoxes, PlugIcon, PlugLayer } from './Plugs'
 
-type Tool = 'select' | LightKind
-type Part = 'body' | 'aim' | 'e0' | 'e1'
+type PlugTool = 'plug-existing' | 'plug-new'
+type Tool = 'select' | LightKind | PlugTool
+type Part = 'body' | 'aim' | 'e0' | 'e1' | 'plug'
 
-const PARTS: Record<string, Part> = { l: 'body', a: 'aim', e0: 'e0', e1: 'e1' }
+const PARTS: Record<string, Part> = { l: 'body', a: 'aim', e0: 'e0', e1: 'e1', p: 'plug' }
 
-/** The light and part of it under a pointer, from its `data-handle`. */
+/** The light or plug point, and the part of it, under a pointer, from its `data-handle`. */
 function parseHandle(handle: string | null): { id: string; part: Part } | null {
-  const m = handle?.match(/^(l|a|e0|e1):(.+)$/)
+  const m = handle?.match(/^(l|a|e0|e1|p):(.+)$/)
   return m ? { id: m[2], part: PARTS[m[1]] } : null
 }
+
+const PLUG_TOOLS: { value: PlugTool; label: string; name: string; existing: boolean; hint: string }[] = [
+  {
+    value: 'plug-existing',
+    label: 'Existing plug',
+    name: 'Existing plug point',
+    existing: true,
+    hint: 'Already there. The number is how many sockets it has, e.g. 2 for a twin socket.',
+  },
+  { value: 'plug-new', label: 'New plug', name: 'New plug point', existing: false, hint: 'One to add.' },
+]
+
+const SOCKETS = [1, 2, 3, 4, 5, 6]
+
+/** What plug points are often for, offered as you type a remark (after the ones already used). */
+const PLUG_USES = [
+  'TV',
+  'Fridge',
+  'Oven',
+  'Microwave',
+  'Hob',
+  'Cooker hood',
+  'Kettle',
+  'Washing machine',
+  'Dryer',
+  'Water heater',
+  'Bedside',
+  'Desk',
+  'Router',
+  'Vacuum',
+]
 
 const HINT: Record<LightKind, string> = {
   downlight: 'Fixed, pointing straight down.',
@@ -76,7 +111,7 @@ const WATTS: Record<LightKind, number[]> = {
 
 export function LightingPlanner() {
   const project = useStore((s) => s.project)
-  const { addLight, updateLight, removeLight } = useStore.getState()
+  const { addLight, updateLight, removeLight, addPlug, updatePlug, removePlug } = useStore.getState()
   const solved = useSolved()
   const plan = useFloorPlan(solved)
   const anchors = useMemo(() => roomAnchors(solved), [solved])
@@ -89,16 +124,22 @@ export function LightingPlanner() {
   const [guides, setGuides] = useState<{ x: number | null; y: number | null }>({ x: null, y: null })
   const [error, setError] = useState<string | null>(null)
   const keRef = useRef(1)
-  // Where the light was when the drag started, so the pointer keeps its grip and a fixed end stays put.
-  const drag = useRef<{ id: string; part: Part; start: { c: Vec2; ends: [Vec2, Vec2]; grab: Vec2 } | null } | null>(
-    null,
-  )
+  // Where the light was when the drag started, so the pointer keeps its grip and a fixed end stays put
+  // (for a plug point, where on the wall it was).
+  const drag = useRef<{
+    id: string
+    part: Part
+    start: { c: Vec2; ends: [Vec2, Vec2]; grab: Vec2 } | null
+    grab?: Vec2
+  } | null>(null)
 
   const mmPerPx = solved.mmPerPx
   const selected = project.lights.find((l) => l.id === selectedId) ?? null
+  const selectedPlug = project.plugs.find((x) => x.id === selectedId) ?? null
 
   const remove = (id: string) => {
-    removeLight(id)
+    if (project.plugs.some((x) => x.id === id)) removePlug(id)
+    else removeLight(id)
     setSelectedId(null)
   }
 
@@ -133,6 +174,15 @@ export function LightingPlanner() {
     if (tool === 'select') return setSelectedId(null)
     const p = toMm(raw)
     const r = roomAt(solved, p)
+    if (tool === 'plug-existing' || tool === 'plug-new') {
+      // On the nearest wall, with as many sockets as the last one placed.
+      const s = r && wallSpot(r, p)
+      if (!r) return setError('Tap inside a room, by the wall to put it on.')
+      if (!s) return setError('This room has no walls to put it on.')
+      const count = project.plugs.at(-1)?.count ?? 1
+      const at = offsetFrom(anchors.get(r.room.id)!, s.at)
+      return setSelectedId(addPlug({ roomId: r.room.id, ...at, count, existing: tool === 'plug-existing', note: '' }))
+    }
     if (!r) return setError('Tap inside a room to place it.')
     setSelectedId(addLight({ ...newLight(tool, r, anchors.get(r.room.id)!, p), ...specsFrom(project.lights, tool) }))
   }
@@ -147,6 +197,7 @@ export function LightingPlanner() {
 
   const onDrag = (raw: Vec2, info: PointerInfo) => {
     const d = drag.current
+    if (d?.part === 'plug') return dragPlug(d, toMm(raw))
     const l = d && useStore.getState().project.lights.find((x) => x.id === d.id)
     const c = l && lightCentre(anchors, l)
     if (!d || !l || !c) return
@@ -179,6 +230,17 @@ export function LightingPlanner() {
     }
   }
 
+  // Along its wall, or onto another wall of the room the pointer is in (across a wall, that's the next room).
+  const dragPlug = (d: NonNullable<typeof drag.current>, p: Vec2) => {
+    const plug = useStore.getState().project.plugs.find((x) => x.id === d.id)
+    const spot = plug && plugSpot(solved, anchors, plug)
+    if (!plug || !spot) return
+    d.grab ??= sub(spot.at, p)
+    const r = roomAt(solved, p) ?? solved.byId.get(plug.roomId)
+    const s = r && wallSpot(r, add(p, d.grab))
+    if (r && s) updatePlug(plug.id, { roomId: r.room.id, ...offsetFrom(anchors.get(r.room.id)!, s.at) })
+  }
+
   const onDragEnd = () => {
     drag.current = null
     setGuides({ x: null, y: null })
@@ -192,6 +254,8 @@ export function LightingPlanner() {
   const box = plan.walls.box
   const selCentre = selected && lightCentre(anchors, selected)
   const selRoom = selected && solved.byId.get(selected.roomId)
+  const plugRoom = selectedPlug && solved.byId.get(selectedPlug.roomId)
+  const plugAt = selectedPlug && plugSpot(solved, anchors, selectedPlug)
 
   return (
     <div className="split">
@@ -218,6 +282,22 @@ export function LightingPlanner() {
               >
                 <LightIcon kind={k.value} />
                 <span className="tool-label">{k.label}</span>
+              </button>
+            ))}
+          </div>
+          <div className="segmented tool-palette" role="radiogroup" aria-label="Plug points">
+            {PLUG_TOOLS.map((t) => (
+              <button
+                key={t.value}
+                className={tool === t.value ? 'on' : ''}
+                onClick={() => pickTool(t.value)}
+                role="radio"
+                aria-checked={tool === t.value}
+                aria-label={t.name}
+                title={`${t.name}: tap by a wall to put one there`}
+              >
+                <PlugIcon existing={t.existing} />
+                <span className="tool-label">{t.label}</span>
               </button>
             ))}
           </div>
@@ -249,6 +329,11 @@ export function LightingPlanner() {
             {(k) => {
               const ke = k / mmPerPx
               keRef.current = ke
+              const roomLabels = labels ? roomLabelBoxes(plan, ke) : []
+              const plugs = placePlugs(project.plugs, solved, anchors, ke, 0, [
+                ...roomLabels,
+                ...lightBoxes(project.lights, anchors, ke),
+              ])
               return (
                 <g transform={`scale(${1 / mmPerPx})`}>
                   <FloorPlan
@@ -258,6 +343,7 @@ export function LightingPlanner() {
                     labels={labels}
                     dims={dims}
                     unit={project.settings.inputUnit}
+                    avoid={plugBoxes(plugs)}
                   />
                   {guides.x != null && (
                     <line
@@ -288,16 +374,18 @@ export function LightingPlanner() {
                       unit={project.settings.inputUnit}
                     />
                   )}
+                  {plugAt && <AlongWall s={plugAt} ke={ke} unit={project.settings.inputUnit} />}
                   <LightLayer
                     lights={project.lights}
                     anchors={anchors}
                     ke={ke}
                     specs={specs}
-                    avoid={labels ? roomLabelBoxes(plan, ke) : []}
+                    avoid={[...roomLabels, ...plugBoxes(plugs)]}
                     outlines={outlines}
                     selectedId={selectedId}
                     interactive
                   />
+                  <PlugLayer placed={plugs} ke={ke} selectedId={selectedId} interactive />
                 </g>
               )
             }}
@@ -306,7 +394,17 @@ export function LightingPlanner() {
       </div>
       <aside className="panel">
         {error && <div className="callout warn">{error}</div>}
-        {selected ? (
+        {selectedPlug ? (
+          <PlugInspector
+            key={selectedPlug.id}
+            plug={selectedPlug}
+            room={plugRoom ?? null}
+            spot={plugAt ?? null}
+            doorway={!!plugRoom && !!plugAt && inDoorway(solved, plugRoom, plugAt)}
+            onDone={() => setSelectedId(null)}
+            onDelete={() => remove(selectedPlug.id)}
+          />
+        ) : selected ? (
           <LightInspector
             key={selected.id}
             light={selected}
@@ -374,6 +472,130 @@ function WallDistances({
         )
       })}
     </g>
+  )
+}
+
+/** Dashed lines along the wall from a plug point to each end of the wall, with how far each is. */
+function AlongWall({ s, ke, unit }: { s: WallSpot; ke: number; unit: LengthUnit }) {
+  const fs = 10.5 / ke
+  const inward = scale(outward(s.dir), -1)
+  const off = scale(inward, 3 / ke)
+  const angle = angleOf(s.dir)
+  const upright = angle > 90 || angle <= -90 ? angle + 180 : angle
+  return (
+    <g pointerEvents="none">
+      {[s.a, s.b].map((end, i) => {
+        const gap = dist(s.at, end)
+        // Too short on screen to hold a label.
+        if (gap * ke < 40) return null
+        const p0 = add(s.at, off)
+        const p1 = add(end, off)
+        const at = add(lerp(p0, p1, 0.5), scale(inward, fs * 0.9))
+        return (
+          <g key={i}>
+            <line x1={p0.x} y1={p0.y} x2={p1.x} y2={p1.y} className="dist-line" vectorEffect="non-scaling-stroke" />
+            <text
+              x={at.x}
+              y={at.y}
+              fontSize={fs}
+              textAnchor="middle"
+              dominantBaseline="middle"
+              transform={`rotate(${upright} ${at.x} ${at.y})`}
+              className="plan-label dist"
+            >
+              {formatLength(Math.round(gap), unit)}
+            </text>
+          </g>
+        )
+      })}
+    </g>
+  )
+}
+
+function PlugInspector({
+  plug,
+  room,
+  spot,
+  doorway,
+  onDone,
+  onDelete,
+}: {
+  plug: PlugPoint
+  room: SolvedRoom | null
+  spot: WallSpot | null
+  doorway: boolean
+  onDone: () => void
+  onDelete: () => void
+}) {
+  const unit = useStore((s) => s.project.settings.inputUnit)
+  const plugs = useStore((s) => s.project.plugs)
+  const updatePlug = useStore((s) => s.updatePlug)
+  // Remarks already used, then the usual ones, each once whatever its case.
+  const uses = [...plugs.map((p) => p.note.trim()).filter(Boolean), ...PLUG_USES].filter(
+    (u, i, all) => all.findIndex((v) => v.toLowerCase() === u.toLowerCase()) === i,
+  )
+  return (
+    <div className="stack">
+      <div className="row between">
+        <h2>Plug point</h2>
+        <span className="muted">{room?.room.name}</span>
+      </div>
+      <Field label="Status" hint={plug.existing ? 'Already there.' : 'One to add.'}>
+        <Segmented
+          value={plug.existing ? 'existing' : 'new'}
+          options={[
+            { value: 'existing', label: 'Existing' },
+            { value: 'new', label: 'New' },
+          ]}
+          onChange={(v) => updatePlug(plug.id, { existing: v === 'existing' })}
+        />
+      </Field>
+      <Field label="Sockets" hint="How many at this point, e.g. 2 for a twin socket.">
+        <Segmented
+          value={String(plug.count)}
+          options={SOCKETS.map((n) => ({ value: String(n), label: String(n) }))}
+          onChange={(v) => updatePlug(plug.id, { count: Number(v) })}
+        />
+      </Field>
+      <Field
+        label="Remark"
+        hint="What it’s for, so you don’t forget (up to 25 characters). It’s shown beside it on the plan and in the report."
+      >
+        <input
+          value={plug.note}
+          placeholder="e.g. TV, oven"
+          maxLength={25}
+          list="plug-uses"
+          onChange={(e) => updatePlug(plug.id, { note: e.target.value })}
+        />
+        <datalist id="plug-uses">
+          {uses.map((u) => (
+            <option key={u} value={u} />
+          ))}
+        </datalist>
+      </Field>
+      {doorway && (
+        <div className="callout warn">It’s in a doorway, or an opening down to the floor. Drag it along the wall.</div>
+      )}
+      {spot && (
+        <p className="muted small">
+          {formatLength(Math.round(dist(spot.at, spot.a)), unit)} from one end of the wall and{' '}
+          {formatLength(Math.round(dist(spot.at, spot.b)), unit)} from the other.
+        </p>
+      )}
+      <p className="muted small">
+        Drag it along the wall, or onto another wall or into the next room. The dashed lines show how far it is from
+        each end of the wall. New plug points start with as many sockets as the last one placed.
+      </p>
+      <div className="row">
+        <button className="btn primary" onClick={onDone}>
+          Done
+        </button>
+        <button className="btn danger" onClick={onDelete}>
+          Delete
+        </button>
+      </div>
+    </div>
   )
 }
 
@@ -649,8 +871,11 @@ function LightingOverview() {
   const watts = (w: number, some: boolean) => (w ? `${fmtInt(w)}${some ? '+' : ''}` : <span className="muted">–</span>)
   return (
     <div className="stack">
-      <h2>Lighting &amp; fan</h2>
-      <p>Pick a light or a fan above the plan, then tap inside a room to place it. Tap one to select it.</p>
+      <h2>Electrical</h2>
+      <p>
+        Pick a light, a fan or a plug point above the plan, then tap inside a room to place it (a plug point goes on the
+        nearest wall). Tap one to select it.
+      </p>
       <ul className="light-key">
         {LIGHT_KINDS.map((k) => (
           <li key={k.value}>
@@ -660,8 +885,16 @@ function LightingOverview() {
             </span>
           </li>
         ))}
+        {PLUG_TOOLS.map((t) => (
+          <li key={t.value}>
+            <PlugIcon existing={t.existing} />
+            <span>
+              <strong>{t.name}</strong> <span className="muted">{t.hint}</span>
+            </span>
+          </li>
+        ))}
       </ul>
-      <h3>Schedule</h3>
+      <h3>Lighting &amp; fan</h3>
       {rows.length === 0 ? (
         <p className="muted">No lights yet.</p>
       ) : (
@@ -715,6 +948,67 @@ function LightingOverview() {
       {rows.length > 0 && unrated && wattTotal > 0 && (
         <p className="muted small">+ Some lights or fans have no power set yet, so the watts are at least this.</p>
       )}
+      <h3>Plug points</h3>
+      <PlugSchedule />
     </div>
+  )
+}
+
+/** Sockets room by room, existing and new, and the new points by how many sockets each has. */
+function PlugSchedule() {
+  const rooms = useStore((s) => s.project.rooms)
+  const plugs = useStore((s) => s.project.plugs)
+  const rows = plugSchedule(rooms, plugs)
+  if (!rows.length) return <p className="muted">No plug points yet.</p>
+  const sum = (f: (r: (typeof rows)[number]) => number) => rows.reduce((a, r) => a + f(r), 0)
+  const cell = (n: number, points: number) =>
+    n ? <span title={`${points} point${points > 1 ? 's' : ''}`}>{n}</span> : <span className="muted">–</span>
+  const toAdd = bySize(rows.flatMap((r) => r.toAddPlugs.map((p) => p.count)))
+  return (
+    <>
+      <div className="table-wrap">
+        <table className="table light-schedule">
+          <thead>
+            <tr>
+              <th>Room</th>
+              <th className="num">Existing</th>
+              <th className="num">New</th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((r) => (
+              <tr key={r.room.id}>
+                <td>{r.room.name}</td>
+                <td className="num">{cell(r.existing.sockets, r.existing.points)}</td>
+                <td className="num">{cell(r.toAdd.sockets, r.toAdd.points)}</td>
+              </tr>
+            ))}
+          </tbody>
+          <tfoot>
+            <tr>
+              <td>Total</td>
+              <td className="num">{sum((r) => r.existing.sockets)}</td>
+              <td className="num">{sum((r) => r.toAdd.sockets)}</td>
+            </tr>
+          </tfoot>
+        </table>
+      </div>
+      <p className="muted small">
+        Counted by the socket, so a <PlugBadge count={2} existing /> counts as 2.
+        {toAdd.length > 0 && (
+          <>
+            {' '}
+            To add:{' '}
+            {toAdd.map(([count, n], i) => (
+              <span key={count} className="nowrap">
+                {i > 0 && ', '}
+                {n} × <PlugBadge count={count} existing={false} />
+              </span>
+            ))}
+            .
+          </>
+        )}
+      </p>
+    </>
   )
 }

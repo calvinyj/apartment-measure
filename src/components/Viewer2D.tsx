@@ -2,11 +2,13 @@ import { useMemo, useState } from 'react'
 import { normDeg } from '../geometry/facing'
 import { roomAnchors } from '../geometry/lights'
 import { useStore } from '../store'
+import { LIGHT_KINDS, type Light, type PlugPoint } from '../types'
 import { PlanImageToggle, useSolved } from './common'
 import { CompassBadge } from './Compass'
 import { FloorPlan, roomLabelBoxes, useFloorPlan } from './FloorPlan'
-import { LightLayer } from './Lights'
+import { LightIcon, lightBoxes, LightLayer } from './Lights'
 import { PlanView } from './PlanView'
+import { placePlugs, plugBoxes, PlugIcon, PlugLayer } from './Plugs'
 
 export function Viewer2D() {
   const project = useStore((s) => s.project)
@@ -16,6 +18,7 @@ export function Viewer2D() {
   const [dims, setDims] = useState(true)
   const [lights, setLights] = useState(true)
   const [specs, setSpecs] = useState(true)
+  const [plugs, setPlugs] = useState(true)
   const [rotation, setRotation] = useState(0)
   const [resetKey, setResetKey] = useState(0)
   const plan = useFloorPlan(solved)
@@ -49,6 +52,11 @@ export function Viewer2D() {
         {lights && project.lights.some((l) => l.watt != null || l.temp != null) && (
           <label className="check small">
             <input type="checkbox" checked={specs} onChange={(e) => setSpecs(e.target.checked)} /> Watt &amp; temp
+          </label>
+        )}
+        {project.plugs.length > 0 && (
+          <label className="check small">
+            <input type="checkbox" checked={plugs} onChange={(e) => setPlugs(e.target.checked)} /> Plug points
           </label>
         )}
         <PlanImageToggle />
@@ -92,34 +100,91 @@ export function Viewer2D() {
           fitKey={String(resetKey)}
           rotation={rotation}
           onRotate={setRotation}
+          overlay={<Legend lights={lights ? project.lights : []} plugs={plugs ? project.plugs : []} />}
         >
-          {(k, rot) => (
-            // The view works in plan image pixels (so the plan image lines up); the drawing is in mm.
-            <g transform={`scale(${1 / mmPerPx})`}>
-              <FloorPlan
-                plan={plan}
-                solved={solved}
-                ke={k / mmPerPx}
-                rot={rot}
-                labels={labels}
-                dims={dims}
-                unit={project.settings.inputUnit}
-              />
-              {lights && (
-                <LightLayer
-                  lights={project.lights}
-                  anchors={anchors}
-                  ke={k / mmPerPx}
+          {(k, rot) => {
+            const ke = k / mmPerPx
+            const roomLabels = labels ? roomLabelBoxes(plan, ke) : []
+            const placed = plugs
+              ? placePlugs(project.plugs, solved, anchors, ke, rot, [
+                  ...roomLabels,
+                  ...(lights ? lightBoxes(project.lights, anchors, ke, rot) : []),
+                ])
+              : []
+            return (
+              // The view works in plan image pixels (so the plan image lines up); the drawing is in mm.
+              <g transform={`scale(${1 / mmPerPx})`}>
+                <FloorPlan
+                  plan={plan}
+                  solved={solved}
+                  ke={ke}
                   rot={rot}
-                  specs={specs}
-                  avoid={labels ? roomLabelBoxes(plan, k / mmPerPx) : []}
-                  outlines={outlines}
+                  labels={labels}
+                  dims={dims}
+                  unit={project.settings.inputUnit}
+                  avoid={plugBoxes(placed)}
                 />
-              )}
-            </g>
-          )}
+                {lights && (
+                  <LightLayer
+                    lights={project.lights}
+                    anchors={anchors}
+                    ke={ke}
+                    rot={rot}
+                    specs={specs}
+                    avoid={[...roomLabels, ...plugBoxes(placed)]}
+                    outlines={outlines}
+                  />
+                )}
+                <PlugLayer placed={placed} ke={ke} rot={rot} />
+              </g>
+            )
+          }}
         </PlanView>
       </div>
+    </div>
+  )
+}
+
+/**
+ * What the symbols on the plan are: each kind of light and fan, and plug points, that's shown. It
+ * starts folded on a narrow screen, where it would cover much of the plan; open, the plan fits beside it.
+ */
+function Legend({ lights, plugs }: { lights: Light[]; plugs: PlugPoint[] }) {
+  const [open, setOpen] = useState(() => window.matchMedia('(min-width: 700px)').matches)
+  const kinds = LIGHT_KINDS.filter((k) => lights.some((l) => l.kind === k.value))
+  const existing = plugs.some((p) => p.existing)
+  const added = plugs.some((p) => !p.existing)
+  if (!kinds.length && !plugs.length) return null
+  const toggle = (
+    <button className="legend-toggle" aria-expanded={open} onClick={() => setOpen(!open)}>
+      Legend <span aria-hidden>{open ? '▾' : '▸'}</span>
+    </button>
+  )
+  if (!open) return <div className="plan-legend folded">{toggle}</div>
+  return (
+    <div className="plan-legend" data-fit-clear>
+      {toggle}
+      <ul>
+        {kinds.map((k) => (
+          <li key={k.value}>
+            <LightIcon kind={k.value} />
+            {k.label}
+          </li>
+        ))}
+        {existing && (
+          <li>
+            <PlugIcon existing />
+            Existing plug point
+          </li>
+        )}
+        {added && (
+          <li>
+            <PlugIcon existing={false} />
+            New plug point
+          </li>
+        )}
+      </ul>
+      {plugs.length > 0 && <p className="muted">The number is how many sockets.</p>}
     </div>
   )
 }

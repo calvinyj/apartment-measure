@@ -7,6 +7,7 @@ import {
   type Edge,
   type Light,
   type Opening,
+  type PlugPoint,
   type Project,
   type Room,
   type RoomType,
@@ -30,6 +31,7 @@ export const emptyProject = (name = 'My apartment'): Project => ({
   advertised: null,
   north: null,
   lights: [],
+  plugs: [],
 })
 
 /** Accepts current and older saved/exported shapes. */
@@ -55,6 +57,7 @@ export function normalizeProject(raw: unknown): Project {
           model: l.model ?? '',
         }))
       : [],
+    plugs: Array.isArray(p.plugs) ? p.plugs.map((x) => ({ ...x, note: x.note ?? '' })) : [],
     image: img ? { src: img.src ?? img.dataUrl ?? '', width: img.width, height: img.height } : null,
     settings: { ...DEFAULT_SETTINGS, ...p.settings },
   }
@@ -106,6 +109,10 @@ interface State {
   updateLight: (id: string, patch: Partial<Light>) => void
   updateLights: (ids: string[], patch: Partial<Light>) => void
   removeLight: (id: string) => void
+
+  addPlug: (plug: Omit<PlugPoint, 'id'>) => string
+  updatePlug: (id: string, patch: Partial<PlugPoint>) => void
+  removePlug: (id: string) => void
 }
 
 const mapRoom = (p: Project, id: string, f: (r: Room) => Room): Project => ({
@@ -170,6 +177,7 @@ export const useStore = create<State>((set, get) => {
           ...s.project,
           rooms: s.project.rooms.filter((r) => r.id !== id),
           lights: s.project.lights.filter((l) => l.roomId !== id),
+          plugs: s.project.plugs.filter((x) => x.roomId !== id),
         },
         dirty: true,
         selectedRoomId: s.selectedRoomId === id ? null : s.selectedRoomId,
@@ -228,6 +236,15 @@ export const useStore = create<State>((set, get) => {
     updateLights: (ids, patch) =>
       edit((p) => ({ ...p, lights: p.lights.map((l) => (ids.includes(l.id) ? { ...l, ...patch } : l)) })),
     removeLight: (id) => edit((p) => ({ ...p, lights: p.lights.filter((l) => l.id !== id) })),
+
+    addPlug: (plug) => {
+      const id = uid()
+      edit((p) => ({ ...p, plugs: [...p.plugs, { ...plug, id }] }))
+      return id
+    },
+    updatePlug: (id, patch) =>
+      edit((p) => ({ ...p, plugs: p.plugs.map((x) => (x.id === id ? { ...x, ...patch } : x)) })),
+    removePlug: (id) => edit((p) => ({ ...p, plugs: p.plugs.filter((x) => x.id !== id) })),
   }
 })
 

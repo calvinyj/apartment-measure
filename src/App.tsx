@@ -15,7 +15,7 @@ const Viewer3D = lazy(() => import('./components/Viewer3D').then((m) => ({ defau
 const TABS: { id: Tab; label: string }[] = [
   { id: 'plan', label: 'Plan' },
   { id: 'measure', label: 'Measure' },
-  { id: 'lighting', label: 'Lighting & fan' },
+  { id: 'lighting', label: 'Electrical' },
   { id: '2d', label: '2D' },
   { id: '3d', label: '3D' },
   { id: 'report', label: 'Report' },

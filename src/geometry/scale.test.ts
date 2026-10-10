@@ -30,6 +30,7 @@ function project(rooms: Room[], k: number, settings: Partial<Settings> = {}): Pr
     version: 3,
     north: null,
     lights: [],
+    plugs: [],
     name: 'scale',
     image: null,
     calibration: { a: { x: 0, y: 0 }, b: { x: 100, y: 0 }, mm: 100 * k },

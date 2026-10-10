@@ -15,7 +15,7 @@ export interface WallPiece {
   fullHeight: boolean
 }
 
-interface Cut {
+export interface Cut {
   from: number
   to: number
   sill: number
@@ -56,7 +56,7 @@ function polyArea(pts: Vec2[]) {
  * neighbouring room's side of the wall. All are placed in world space, then
  * projected onto this edge.
  */
-function cutsFor(solved: Solved, r: SolvedRoom, k: number): Cut[] {
+export function cutsFor(solved: Solved, r: SolvedRoom, k: number): Cut[] {
   const p = r.starts[k]
   const d = r.dirs[k]
   const cuts: Cut[] = []

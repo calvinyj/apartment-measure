@@ -50,6 +50,7 @@ function project(rooms: Room[]): Project {
     version: 3,
     north: null,
     lights: [],
+    plugs: [],
     name: 't',
     image: null,
     calibration: { a: { x: 0, y: 0 }, b: { x: 100, y: 0 }, mm: 1000 },
