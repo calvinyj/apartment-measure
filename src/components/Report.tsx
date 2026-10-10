@@ -1,14 +1,41 @@
 import { useState } from 'react'
 import { acZones, hpLabel, type AcZone } from '../ac'
 import { formatFacing, roomFacing } from '../geometry/facing'
+import { FAN_SIZES, fixtureList, formatWatts, TUBE_SIZES, type FixtureRow } from '../geometry/lights'
 import { downloadFile, useStore } from '../store'
-import { roomTypeInfo } from '../types'
+import { lightKindInfo, roomTypeInfo, type LengthUnit } from '../types'
 import { formatArea, formatLength, formatSqft, fmtInt, M2_TO_SQFT, m2 } from '../units'
 import { useSolved } from './common'
+import { LightIcon } from './Lights'
 
 const pct = (x: number) => `${x >= 0 ? '+' : ''}${(x * 100).toFixed(1)}%`
 const installedLabel = (z: AcZone) => z.installed.map((u) => hpLabel(u.hp)).join(' + ')
 const suggestedLabel = (z: AcZone) => `${z.units.count > 1 ? `${z.units.count} × ` : ''}${hpLabel(z.units.hp)}`
+
+/** A row of the lighting list's size, power and colour, e.g. "150 mm · 12W · 3000K"; '' when none are set. */
+function fixtureSpec(f: FixtureRow, unit: LengthUnit) {
+  const fanSize = f.kind === 'fan' && FAN_SIZES.find((s) => s.mm === f.size)
+  const tube = f.kind === 'strip' && TUBE_SIZES.find((s) => s.mm === f.size)
+  const size =
+    f.size == null
+      ? null
+      : f.kind === 'strip'
+        ? `${tube ? `${tube.feet}ft` : formatLength(f.size, unit)} tube`
+        : fanSize
+          ? `${fanSize.inches}″`
+          : `${formatLength(f.size, unit)}${f.linear ? ' long' : ''}`
+  const temp = f.temp == null ? null : f.temp === 'tri' ? 'tri-colour' : `${f.temp}K`
+  const colour = f.kind === 'fan' ? (temp ? `${temp} light` : 'no light') : temp
+  return [size, f.watt == null ? null : formatWatts(f.watt), colour].filter(Boolean).join(' · ')
+}
+
+/** How many to buy; for LED tube, the tubes, and the runs they light (e.g. "1 run, 2.96 m"). */
+const fixtureQty = (f: FixtureRow) => (f.kind === 'strip' ? f.tubes : f.count)
+const fixtureRuns = (f: FixtureRow) =>
+  f.kind === 'strip' ? `${f.count} run${f.count > 1 ? 's' : ''}, ${(f.length / 1000).toFixed(2)} m` : null
+
+const fixtureRooms = (f: FixtureRow) =>
+  f.rooms.map((r) => (r.count > 1 ? `${r.room.name} ×${r.count}` : r.room.name)).join(', ')
 
 export function Report() {
   const project = useStore((s) => s.project)
@@ -34,6 +61,11 @@ export function Report() {
   const adv = project.advertised
   const advMm2 = adv ? (adv.unit === 'sqft' ? adv.value / M2_TO_SQFT : adv.value) * 1e6 : null
   const hasBalcony = solved.rooms.some((r) => r.room.type === 'balcony')
+  const fixtures = fixtureList(project.rooms, project.lights)
+  const fixtureWatts = fixtures.reduce((sum, f) => sum + f.watts, 0)
+  // A + where some have no power set, so the total is at least this.
+  const unrated = fixtures.some((f) => f.watt == null)
+  const unit = settings.inputUnit
 
   const exportCsv = () => {
     const rows = [
@@ -65,6 +97,20 @@ export function Report() {
         z.enough == null ? '' : z.enough ? 'yes' : 'no',
         suggestedLabel(z),
       ]),
+      ...(fixtures.length
+        ? [
+            [],
+            ['Light or fan', 'Model', 'Size, power and colour', 'Quantity', 'Rooms', 'Watts'],
+            ...fixtures.map((f) => [
+              lightKindInfo(f.kind).label,
+              f.model,
+              fixtureSpec(f, unit),
+              fixtureRuns(f) ? `${fixtureQty(f)} (${fixtureRuns(f)})` : fixtureQty(f),
+              fixtureRooms(f),
+              f.watt == null ? '' : Math.round(f.watts),
+            ]),
+          ]
+        : []),
     ]
     const csv = rows.map((r) => r.map((c) => `"${String(c).replace(/"/g, '""')}"`).join(',')).join('\n')
     downloadFile(`${project.name || 'apartment'}-areas.csv`, csv, 'text/csv')
@@ -291,6 +337,77 @@ export function Report() {
           kitchens. Group open-plan rooms with an aircon zone on the Plan tab. A unit that’s already installed counts as
           enough if the estimate is no more than {Math.round(settings.acShortfall * 100)}% above its rating.
         </p>
+      </section>
+
+      <section className="card">
+        <h3>Lighting &amp; fans</h3>
+        {fixtures.length === 0 ? (
+          <p className="muted">
+            No lights or fans yet. Place them on the{' '}
+            <button className="link" onClick={() => setTab('lighting')}>
+              Lighting &amp; fan
+            </button>{' '}
+            tab.
+          </p>
+        ) : (
+          <>
+            <div className="table-wrap">
+              <table className="table">
+                <thead>
+                  <tr>
+                    <th>Light or fan</th>
+                    <th>Model</th>
+                    <th>Size, power and colour</th>
+                    <th className="num">Qty</th>
+                    <th>Rooms</th>
+                    <th className="num">Watts</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {fixtures.map((f, i) => (
+                    <tr key={i}>
+                      <td>
+                        <span className="fixture">
+                          <LightIcon kind={f.kind} />
+                          {lightKindInfo(f.kind).label}
+                        </span>
+                      </td>
+                      <td>{f.model || <span className="muted">not set</span>}</td>
+                      <td>{fixtureSpec(f, unit) || <span className="muted">–</span>}</td>
+                      <td className="num">
+                        {fixtureQty(f)}
+                        {fixtureRuns(f) && <div className="muted small">{fixtureRuns(f)}</div>}
+                      </td>
+                      <td>{fixtureRooms(f)}</td>
+                      <td className="num">{f.watt == null ? <span className="muted">–</span> : fmtInt(f.watts)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+                <tfoot>
+                  <tr>
+                    <td colSpan={5}>Total</td>
+                    <td className="num">
+                      {fixtureWatts ? (
+                        `${fmtInt(fixtureWatts)}${unrated ? '+' : ''}`
+                      ) : (
+                        <span className="muted">–</span>
+                      )}
+                    </td>
+                  </tr>
+                </tfoot>
+              </table>
+            </div>
+            <p className="muted small">
+              Lights that match in type, model, size, power and colour share a row.
+              {unrated && fixtureWatts > 0 && ' + Some have no power set yet, so the total is at least this.'} Set
+              models and settings on the{' '}
+              <button className="link" onClick={() => setTab('lighting')}>
+                Lighting &amp; fan
+              </button>{' '}
+              tab.
+            </p>
+          </>
+        )}
       </section>
     </div>
   )

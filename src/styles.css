@@ -1111,7 +1111,7 @@ details.more summary {
   padding-top: 12px;
 }
 
-/* ---------- 2D and 3D ---------- */
+/* ---------- 2D, lighting and 3D ---------- */
 
 .viewer2d,
 .viewer3d {
@@ -1121,22 +1121,108 @@ details.more summary {
 }
 
 /* The toolbar sits above the plan rather than over it, so the fitted plan clears it at any width. */
-.viewer2d {
+.banded {
   display: flex;
   flex-direction: column;
   background: #eef1f4;
 }
 
-.viewer2d .viewer-toolbar {
+.banded > .viewer-toolbar {
   position: static;
   padding: 12px 12px 0;
 }
 
-.viewer2d-canvas {
+.band-canvas {
   position: relative;
   flex: 1;
   min-height: 0;
   overflow: hidden;
+}
+
+.light-icon {
+  width: 22px;
+  height: 22px;
+  display: block;
+  flex: none;
+}
+
+.tool-palette button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 34px;
+}
+
+.plan-label.dist {
+  fill: var(--accent);
+}
+
+.plan-label.spec {
+  fill: #374151;
+}
+
+.plan-label .temp.warm {
+  fill: #b45309;
+}
+
+.plan-label .temp.cool {
+  fill: #0f766e;
+}
+
+.plan-label .temp.daylight {
+  fill: #1d4ed8;
+}
+
+.dist-line {
+  stroke: var(--accent);
+  stroke-width: 1;
+  stroke-dasharray: 3 3;
+}
+
+.light-key {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  font-size: 0.92rem;
+}
+
+.light-key li {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+}
+
+.fixture {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  white-space: nowrap;
+}
+
+/* Seven columns of figures in the side panel. */
+.light-schedule th,
+.light-schedule td {
+  padding: 7px 4px;
+}
+
+.light-schedule th:first-child,
+.light-schedule td:first-child {
+  padding-left: 0;
+}
+
+.light-schedule th .light-icon {
+  margin-left: auto;
+  width: 18px;
+  height: 18px;
+}
+
+@media (max-width: 820px) {
+  .tool-palette .tool-label {
+    display: none;
+  }
 }
 
 .label-layer {

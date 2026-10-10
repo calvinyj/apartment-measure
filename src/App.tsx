@@ -1,5 +1,6 @@
 import { lazy, Suspense, useEffect, useState, type FormEvent } from 'react'
 import { LayoutsPage } from './components/LayoutsPage'
+import { LightingPlanner } from './components/LightingPlanner'
 import { MeasureView } from './components/MeasureView'
 import { PlanEditor } from './components/PlanEditor'
 import { Report } from './components/Report'
@@ -14,6 +15,7 @@ const Viewer3D = lazy(() => import('./components/Viewer3D').then((m) => ({ defau
 const TABS: { id: Tab; label: string }[] = [
   { id: 'plan', label: 'Plan' },
   { id: 'measure', label: 'Measure' },
+  { id: 'lighting', label: 'Lighting & fan' },
   { id: '2d', label: '2D' },
   { id: '3d', label: '3D' },
   { id: 'report', label: 'Report' },
@@ -84,6 +86,7 @@ export function App() {
             <Viewer3D />
           </Suspense>
         )}
+        {current === 'lighting' && <LightingPlanner />}
         {current === 'report' && <Report />}
         {current === 'settings' && <SettingsPage />}
       </main>

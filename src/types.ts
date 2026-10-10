@@ -84,6 +84,55 @@ export interface Room {
   sunny: boolean | null
 }
 
+export type LightKind = 'downlight' | 'surface' | 'eyeball' | 'pendant' | 'strip' | 'fan'
+
+export const LIGHT_KINDS: { value: LightKind; label: string; plural: string; linear?: boolean }[] = [
+  { value: 'downlight', label: 'Downlight', plural: 'downlights' },
+  { value: 'surface', label: 'Surface light', plural: 'surface lights' },
+  { value: 'eyeball', label: 'Eyeball', plural: 'eyeballs' },
+  { value: 'pendant', label: 'Pendant', plural: 'pendants', linear: true },
+  // A run of LED tubes; saved layouts know it as 'strip'.
+  { value: 'strip', label: 'LED tube', plural: 'LED tubes', linear: true },
+  { value: 'fan', label: 'Fan', plural: 'fans' },
+]
+
+/** Colour temperature in kelvin, or 'tri' for a light that switches between three. */
+export type LightTemp = number | 'tri'
+
+export const LIGHT_TEMPS: { value: LightTemp; label: string }[] = [
+  { value: 2700, label: '2700K · warm' },
+  { value: 3000, label: '3000K · warm white' },
+  { value: 4000, label: '4000K · cool white' },
+  { value: 6500, label: '6500K · daylight' },
+  { value: 'tri', label: 'Tri-colour (3CCT)' },
+]
+
+export const lightKindInfo = (k: LightKind) => LIGHT_KINDS.find((l) => l.value === k) ?? LIGHT_KINDS[0]
+
+/** A light or ceiling fan on the lighting & fan plan. */
+export interface Light {
+  id: string
+  kind: LightKind
+  /** the room it's in; it keeps its place in the room as measurements change the room's size */
+  roomId: string
+  /** centre, in mm from the centre of the room's measured outline */
+  x: number
+  y: number
+  /** degrees clockwise from plan right: where an eyeball aims, or which way a pendant or LED tube runs */
+  angle: number
+  /** mm: a pendant's or strip's length (a pendant of 0 is a round one), or a fan's blade sweep */
+  length: number
+  /** mm across a round fitting: a downlight's or eyeball's cut-out, a surface light, a round pendant; null = unset.
+   * For a run of LED tube, the length of each tube. */
+  size: number | null
+  /** watts; for a run of LED tube, watts per tube; null = not set */
+  watt: number | null
+  /** colour temperature; for a fan, of its light (null = it has none) */
+  temp: LightTemp | null
+  /** brand and model, for the report; '' = not set */
+  model: string
+}
+
 export interface Calibration {
   a: Vec2
   b: Vec2
@@ -149,4 +198,5 @@ export interface Project {
   advertised: { value: number; unit: 'sqft' | 'm2' } | null
   /** where north points on the plan, in degrees clockwise from the top of the image; null = not set */
   north: number | null
+  lights: Light[]
 }

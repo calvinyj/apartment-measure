@@ -1,9 +1,11 @@
 import { create } from 'zustand'
+import { DEFAULT_TUBE } from './geometry/lights'
 import { signedArea } from './geometry/polygon'
 import {
   DEFAULT_SETTINGS,
   type Calibration,
   type Edge,
+  type Light,
   type Opening,
   type Project,
   type Room,
@@ -27,6 +29,7 @@ export const emptyProject = (name = 'My apartment'): Project => ({
   settings: { ...DEFAULT_SETTINGS },
   advertised: null,
   north: null,
+  lights: [],
 })
 
 /** Accepts current and older saved/exported shapes. */
@@ -42,12 +45,22 @@ export function normalizeProject(raw: unknown): Project {
     version: 3,
     rooms,
     north: typeof p.north === 'number' ? p.north : null,
+    // Lights saved before they had a size, power, colour temperature or model.
+    lights: Array.isArray(p.lights)
+      ? p.lights.map((l) => ({
+          ...l,
+          size: l.size ?? (l.kind === 'strip' ? DEFAULT_TUBE : null),
+          watt: l.watt ?? null,
+          temp: l.temp ?? null,
+          model: l.model ?? '',
+        }))
+      : [],
     image: img ? { src: img.src ?? img.dataUrl ?? '', width: img.width, height: img.height } : null,
     settings: { ...DEFAULT_SETTINGS, ...p.settings },
   }
 }
 
-export type Tab = 'layouts' | 'plan' | 'measure' | '2d' | '3d' | 'report' | 'settings'
+export type Tab = 'layouts' | 'plan' | 'measure' | '2d' | '3d' | 'lighting' | 'report' | 'settings'
 export type WizardStep = 'room' | number | 'summary'
 export type SaveState = 'saved' | 'pending' | 'saving' | 'offline' | 'conflict' | 'error'
 
@@ -88,6 +101,11 @@ interface State {
   addOpening: (id: string, index: number, o: Omit<Opening, 'id'>) => void
   updateOpening: (id: string, index: number, openingId: string, patch: Partial<Opening>) => void
   removeOpening: (id: string, index: number, openingId: string) => void
+
+  addLight: (light: Omit<Light, 'id'>) => string
+  updateLight: (id: string, patch: Partial<Light>) => void
+  updateLights: (ids: string[], patch: Partial<Light>) => void
+  removeLight: (id: string) => void
 }
 
 const mapRoom = (p: Project, id: string, f: (r: Room) => Room): Project => ({
@@ -148,7 +166,11 @@ export const useStore = create<State>((set, get) => {
     updateRoom: (id, patch) => edit((p) => mapRoom(p, id, (r) => ({ ...r, ...patch }))),
     deleteRoom: (id) =>
       set((s) => ({
-        project: { ...s.project, rooms: s.project.rooms.filter((r) => r.id !== id) },
+        project: {
+          ...s.project,
+          rooms: s.project.rooms.filter((r) => r.id !== id),
+          lights: s.project.lights.filter((l) => l.roomId !== id),
+        },
         dirty: true,
         selectedRoomId: s.selectedRoomId === id ? null : s.selectedRoomId,
         wizard: s.wizard?.roomId === id ? null : s.wizard,
@@ -195,6 +217,17 @@ export const useStore = create<State>((set, get) => {
       edit((p) =>
         mapRoom(p, id, (r) => mapEdge(r, index, (e) => ({ ...e, openings: e.openings.filter((o) => o.id !== openingId) }))),
       ),
+
+    addLight: (light) => {
+      const id = uid()
+      edit((p) => ({ ...p, lights: [...p.lights, { ...light, id }] }))
+      return id
+    },
+    updateLight: (id, patch) =>
+      edit((p) => ({ ...p, lights: p.lights.map((l) => (l.id === id ? { ...l, ...patch } : l)) })),
+    updateLights: (ids, patch) =>
+      edit((p) => ({ ...p, lights: p.lights.map((l) => (ids.includes(l.id) ? { ...l, ...patch } : l)) })),
+    removeLight: (id) => edit((p) => ({ ...p, lights: p.lights.filter((l) => l.id !== id) })),
   }
 })
 
