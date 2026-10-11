@@ -1173,6 +1173,18 @@ details.more summary {
   fill: #1d4ed8;
 }
 
+.plan-label .temp.rgb .r {
+  fill: #dc2626;
+}
+
+.plan-label .temp.rgb .g {
+  fill: #15803d;
+}
+
+.plan-label .temp.rgb .b {
+  fill: #2563eb;
+}
+
 .dist-line {
   stroke: var(--accent);
   stroke-width: 1;

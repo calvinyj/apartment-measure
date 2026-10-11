@@ -663,7 +663,8 @@ function LightInspector({
     updateLight(light.id, { kind, length, size, model: '' })
   }
 
-  const setTemp = (v: string) => updateLight(light.id, { temp: v === '' ? null : v === 'tri' ? 'tri' : Number(v) })
+  const setTemp = (v: string) =>
+    updateLight(light.id, { temp: v === '' ? null : v === 'tri' || v === 'rgb' ? v : Number(v) })
 
   return (
     <div className="stack">

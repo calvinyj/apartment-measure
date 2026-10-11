@@ -96,8 +96,11 @@ export const LIGHT_KINDS: { value: LightKind; label: string; plural: string; lin
   { value: 'fan', label: 'Fan', plural: 'fans' },
 ]
 
-/** Colour temperature in kelvin, or 'tri' for a light that switches between three. */
-export type LightTemp = number | 'tri'
+/**
+ * Colour temperature in kelvin, 'tri' for a light that switches between three, or 'rgb' for a
+ * full-colour one (RGB).
+ */
+export type LightTemp = number | 'tri' | 'rgb'
 
 export const LIGHT_TEMPS: { value: LightTemp; label: string }[] = [
   { value: 2700, label: '2700K · warm' },
@@ -105,6 +108,7 @@ export const LIGHT_TEMPS: { value: LightTemp; label: string }[] = [
   { value: 4000, label: '4000K · cool white' },
   { value: 6500, label: '6500K · daylight' },
   { value: 'tri', label: 'Tri-colour (3CCT)' },
+  { value: 'rgb', label: 'RGB full colour' },
 ]
 
 export const lightKindInfo = (k: LightKind) => LIGHT_KINDS.find((l) => l.value === k) ?? LIGHT_KINDS[0]
