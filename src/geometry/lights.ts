@@ -149,8 +149,8 @@ export const wattLabel = (l: Pick<Light, 'kind' | 'watt' | 'length' | 'size'>) =
 /** A fan's blade sweep in inches, as fans are sold: "46″". */
 export const fanSizeLabel = (l: Pick<Light, 'length'>) => `${Math.round(l.length / 25.4)}″`
 
-/** "3000K", or "3CCT" for tri-colour. */
-export const tempLabel = (t: LightTemp) => (t === 'tri' ? '3CCT' : `${t}K`)
+/** "3000K", "3CCT" for tri-colour, or "RGB" for full colour. */
+export const tempLabel = (t: LightTemp) => (t === 'tri' ? '3CCT' : t === 'rgb' ? 'RGB' : `${t}K`)
 
 /** A light's stored position: p from the room's anchor, to the whole mm. */
 export const offsetFrom = (anchor: Vec2, p: Vec2) => ({ x: Math.round(p.x - anchor.x), y: Math.round(p.y - anchor.y) })

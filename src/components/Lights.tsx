@@ -255,7 +255,8 @@ export function lightBoxes(lights: Light[], anchors: Map<string, Vec2>, ke: numb
   })
 }
 
-const tempClass = (t: LightTemp) => (t === 'tri' ? '' : t <= 3000 ? ' warm' : t >= 5000 ? ' daylight' : ' cool')
+const tempClass = (t: LightTemp) =>
+  typeof t !== 'number' ? '' : t <= 3000 ? ' warm' : t >= 5000 ? ' daylight' : ' cool'
 
 /** What a label costs where it covers something; the cheapest spot wins, in the order they're tried. */
 const COVERS = { light: 4, label: 4, room: 3, wall: 2 }
@@ -357,7 +358,17 @@ function SpecLabels({
           >
             {text}
             {text && temp && ' '}
-            {temp && <tspan className={`temp${tempClass(l.temp!)}`}>{temp}</tspan>}
+            {temp &&
+              (l.temp === 'rgb' ? (
+                // Full colour: each letter in its own colour.
+                <tspan className="temp rgb">
+                  <tspan className="r">R</tspan>
+                  <tspan className="g">G</tspan>
+                  <tspan className="b">B</tspan>
+                </tspan>
+              ) : (
+                <tspan className={`temp${tempClass(l.temp!)}`}>{temp}</tspan>
+              ))}
           </text>
         )
       })}

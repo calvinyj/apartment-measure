@@ -188,6 +188,7 @@ describe('lights', () => {
     expect(fanSizeLabel(light({ kind: 'fan', length: 1320 }))).toBe('52″')
     expect(tempLabel(3000)).toBe('3000K')
     expect(tempLabel('tri')).toBe('3CCT')
+    expect(tempLabel('rgb')).toBe('RGB')
     expect(isRound(light({ kind: 'surface' }))).toBe(true)
     expect(isRound(light({ kind: 'pendant', length: 0 }))).toBe(true)
     expect(isRound(light({ kind: 'pendant', length: 1200 }))).toBe(false)
