@@ -6,6 +6,7 @@ import { bySize, plugSchedule, type PlugTally } from '../geometry/plugs'
 import { downloadFile, useStore } from '../store'
 import { lightKindInfo, roomTypeInfo, type LengthUnit, type PlugPoint } from '../types'
 import { formatArea, formatLength, formatSqft, fmtInt, M2_TO_SQFT, m2 } from '../units'
+import { cabinetCsv, CabinetsReport } from './CabinetReport'
 import { useSolved } from './common'
 import { LightIcon } from './Lights'
 import { PlugBadge } from './Plugs'
@@ -165,6 +166,7 @@ export function Report() {
               : []),
           ]
         : []),
+      ...cabinetCsv(project, solved),
     ]
     const csv = rows.map((r) => r.map((c) => `"${String(c).replace(/"/g, '""')}"`).join(',')).join('\n')
     downloadFile(`${project.name || 'apartment'}-areas.csv`, csv, 'text/csv')
@@ -524,6 +526,21 @@ export function Report() {
               )}
             </p>
           </>
+        )}
+      </section>
+
+      <section className="card">
+        <h3>Cabinets</h3>
+        {project.cabinets.length === 0 ? (
+          <p className="muted">
+            No cabinets yet. Plan them on the{' '}
+            <button className="link" onClick={() => setTab('cabinets')}>
+              Cabinets
+            </button>{' '}
+            tab.
+          </p>
+        ) : (
+          <CabinetsReport solved={solved} />
         )}
       </section>
     </div>

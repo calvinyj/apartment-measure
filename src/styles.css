@@ -1377,3 +1377,211 @@ details.more summary {
   gap: 12px;
   align-items: flex-start;
 }
+
+/* ---------- cabinets ---------- */
+
+.progress.labelled button {
+  padding: 0 9px;
+}
+
+.stack.tight {
+  gap: 6px;
+}
+
+.block {
+  display: block;
+}
+
+.dot-mark {
+  display: inline-block;
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: #f97316;
+  vertical-align: 0;
+}
+
+.canvas-note {
+  position: absolute;
+  left: 12px;
+  right: 12px;
+  bottom: 12px;
+}
+
+.cab-drawings {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 8px 12px 12px;
+}
+
+.cab-drawing {
+  position: relative;
+  flex: 2 1 0;
+  min-height: 0;
+  background: var(--surface);
+  border-radius: 8px;
+}
+
+.cab-drawing.top {
+  flex: 1 1 0;
+}
+
+.cab-drawing svg,
+.cab-thumb svg {
+  display: block;
+  position: absolute;
+  inset: 0;
+}
+
+.cab-divider {
+  fill: transparent;
+}
+
+.cab-divider:hover {
+  fill: var(--accent);
+  fill-opacity: 0.25;
+}
+
+.choice-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+.choice,
+.template {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  text-align: left;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface);
+  cursor: pointer;
+}
+
+.choice span {
+  font-size: 0.82rem;
+  color: var(--muted);
+}
+
+.choice.on,
+.template.on {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 1px var(--accent);
+  background: var(--accent-soft);
+}
+
+.template-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.template {
+  gap: 8px;
+}
+
+.cab-thumb {
+  position: relative;
+  width: 100%;
+  height: 72px;
+  background: var(--surface);
+  border-radius: 6px;
+}
+
+.finish-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 8px;
+}
+
+.chip {
+  display: inline-flex;
+  align-items: center;
+  padding: 4px 10px;
+  border: 1px solid var(--line);
+  border-radius: 99px;
+  background: var(--surface);
+  font-size: 0.85rem;
+  cursor: pointer;
+}
+
+.facts {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 4px 12px;
+  margin: 0;
+  font-size: 0.92rem;
+}
+
+.facts dt {
+  color: var(--muted);
+}
+
+.facts dd {
+  margin: 0;
+}
+
+.table.compact th,
+.table.compact td {
+  padding: 5px 6px;
+}
+
+.table.materials td.indent {
+  padding-left: 16px;
+}
+
+.table.materials tr.subtotal td {
+  font-weight: 600;
+}
+
+.table.materials tr.total td {
+  border-top: 2px solid var(--line);
+}
+
+.table.materials tbody + tbody th {
+  padding-top: 14px;
+}
+
+.cab-report {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--line);
+}
+
+.cab-report-drawings {
+  display: grid;
+  grid-template-columns: 2fr 1fr;
+  gap: 8px;
+}
+
+.cab-report-drawings .cab-drawing {
+  height: 220px;
+  border: 1px solid var(--line);
+}
+
+@media (max-width: 820px) {
+  .cab-report-drawings {
+    grid-template-columns: 1fr;
+  }
+  .finish-row {
+    grid-template-columns: 1fr;
+  }
+}
+
+.panel .segmented {
+  flex-wrap: wrap;
+}
+
+.row.divide > span {
+  flex: 1;
+}
+
+.row.divide .btn {
+  min-width: 44px;
+}

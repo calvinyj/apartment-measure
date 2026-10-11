@@ -15,6 +15,7 @@ function project(rooms: Room[], north: number | null): Project {
     north,
     lights: [],
     plugs: [],
+    cabinets: [],
     name: 't',
     image: null,
     // 1 px = 10 mm

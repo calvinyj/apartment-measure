@@ -153,6 +153,141 @@ export interface PlugPoint {
   note: string
 }
 
+export type CabinetKind = 'base' | 'wall' | 'tall' | 'wardrobe' | 'vanity' | 'other'
+
+export const CABINET_KINDS: { value: CabinetKind; label: string; hint: string }[] = [
+  { value: 'base', label: 'Base cabinet', hint: 'On the floor under a counter, usually with a stone top' },
+  { value: 'wall', label: 'Wall cabinet', hint: 'Hung on the wall, e.g. above the counter' },
+  { value: 'tall', label: 'Tall cabinet', hint: 'Floor to near the ceiling: pantry, oven tower, fridge housing' },
+  { value: 'wardrobe', label: 'Wardrobe', hint: 'Hanging space, shelves and drawers' },
+  { value: 'vanity', label: 'Vanity', hint: 'Bathroom cabinet under a basin' },
+  { value: 'other', label: 'Other', hint: 'TV console, shoe cabinet, shelving' },
+]
+
+export const cabinetKindInfo = (k: CabinetKind) => CABINET_KINDS.find((c) => c.value === k) ?? CABINET_KINDS[0]
+
+/** What's on a compartment's front. */
+export type CabinetFront = 'door' | 'drawers' | 'open' | 'appliance' | 'panel'
+export type DoorHinge = 'left' | 'right' | 'pair' | 'lift' | 'sliding'
+export type ApplianceKind = 'oven' | 'microwave' | 'dishwasher' | 'fridge' | 'washer' | 'hood' | 'other'
+
+/**
+ * A compartment. Settings for fronts it doesn't have are kept, so switching from doors to
+ * drawers and back loses nothing.
+ */
+export interface CabinetCell {
+  front: CabinetFront
+  /** how its doors open (door fronts) */
+  hinge: DoorHinge
+  /** drawers, stacked evenly (drawer fronts) */
+  drawers: number
+  /** adjustable shelves inside (doors or open) */
+  shelves: number
+  /** a hanging rail inside (doors or open) */
+  rail: boolean
+  /** what fills the gap (appliance) */
+  appliance: ApplianceKind
+}
+
+/** Compartments side by side ('across', left to right) or one above another ('stack', top to bottom). */
+export interface CabinetSplit {
+  split: 'across' | 'stack'
+  /** mm across (or high) each part is, to the middle of the divider either side; null = an equal share of what's left */
+  parts: { size: number | null; section: CabinetSection }[]
+}
+
+export type CabinetSection = CabinetCell | CabinetSplit
+
+export interface Finish {
+  /** what it is, e.g. a laminate's name or code; '' = not set */
+  name: string
+  color: string
+}
+
+export type StoneMaterial = 'quartz' | 'granite' | 'marble' | 'sintered' | 'solid-surface' | 'laminate'
+
+export const STONE_MATERIALS: { value: StoneMaterial; label: string }[] = [
+  { value: 'quartz', label: 'Quartz' },
+  { value: 'granite', label: 'Granite' },
+  { value: 'marble', label: 'Marble' },
+  { value: 'sintered', label: 'Sintered stone' },
+  { value: 'solid-surface', label: 'Solid surface' },
+  { value: 'laminate', label: 'Laminate' },
+]
+
+export type CutoutKind = 'sink' | 'hob' | 'basin'
+
+/** A hole in the top for a sink, hob or basin. */
+export interface Cutout {
+  id: string
+  kind: CutoutKind
+  /** which leg of the cabinet (which of its walls) it's on */
+  leg: number
+  /** its centre, mm from the left end of that leg's front */
+  x: number
+  /** the cut-out's size, from the sink's or hob's spec sheet: across, and front to back */
+  width: number
+  depth: number
+  /** sink under the stone, or dropped in from the top */
+  mount: 'under' | 'top'
+}
+
+export interface Worktop {
+  material: StoneMaterial
+  thickness: number
+  /** how far it reaches past the fronts */
+  overhang: number
+  /** height of the stone up the wall behind it; 0 = none */
+  upstand: number
+  finish: Finish
+  cutouts: Cutout[]
+}
+
+/** Where a cabinet stands: along one wall of a room, or round its inside corners onto the next one or two (an L or a U). */
+export interface CabinetWalls {
+  roomId: string
+  /**
+   * The walls it runs along, left to right as you face them from inside the room: one for a straight
+   * cabinet, two for an L, three for a U. Each is the id of an edge of that wall (a straight wall split in
+   * parts on the plan is one wall).
+   */
+  edgeIds: string[]
+  /** mm from the first wall's left corner to the cabinet's left end */
+  start: number
+  /** mm it runs along its last wall, from `start` (straight) or from the corner (L or U); null = to that wall's right corner */
+  length: number | null
+}
+
+export type HandleStyle = 'none' | 'profile' | 'bar' | 'knob'
+
+/** On the floor with a kick board underneath, on legs, or hung on the wall. */
+export type CabinetMount = 'plinth' | 'legs' | 'hung'
+
+/** A built-in cabinet: its place on the walls, its size, its compartments, top and finishes. */
+export interface Cabinet {
+  id: string
+  name: string
+  kind: CabinetKind
+  /** the template it started from; a leg it gains by turning another corner is filled from it */
+  template: string
+  walls: CabinetWalls
+  /** the front along each of its walls, left to right */
+  legs: CabinetSection[]
+  /** of the carcass, without the plinth or top, mm */
+  height: number
+  depth: number
+  /** mm from the floor to the underside of the carcass: the plinth, legs, or how high it hangs */
+  bottom: number
+  mount: CabinetMount
+  /** thickness of the carcass board, mm */
+  board: number
+  handle: HandleStyle
+  carcass: Finish
+  fronts: Finish
+  /** stone (or other) top; null = none */
+  top: Worktop | null
+}
+
 export interface Calibration {
   a: Vec2
   b: Vec2
@@ -220,4 +355,5 @@ export interface Project {
   north: number | null
   lights: Light[]
   plugs: PlugPoint[]
+  cabinets: Cabinet[]
 }

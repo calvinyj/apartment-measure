@@ -1,4 +1,5 @@
 import { lazy, Suspense, useEffect, useState, type FormEvent } from 'react'
+import { CabinetPlanner } from './components/CabinetPlanner'
 import { LayoutsPage } from './components/LayoutsPage'
 import { LightingPlanner } from './components/LightingPlanner'
 import { MeasureView } from './components/MeasureView'
@@ -16,6 +17,7 @@ const TABS: { id: Tab; label: string }[] = [
   { id: 'plan', label: 'Plan' },
   { id: 'measure', label: 'Measure' },
   { id: 'lighting', label: 'Electrical' },
+  { id: 'cabinets', label: 'Cabinets' },
   { id: '2d', label: '2D' },
   { id: '3d', label: '3D' },
   { id: 'report', label: 'Report' },
@@ -87,6 +89,7 @@ export function App() {
           </Suspense>
         )}
         {current === 'lighting' && <LightingPlanner />}
+        {current === 'cabinets' && <CabinetPlanner />}
         {current === 'report' && <Report />}
         {current === 'settings' && <SettingsPage />}
       </main>
