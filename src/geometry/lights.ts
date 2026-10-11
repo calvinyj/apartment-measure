@@ -146,6 +146,9 @@ export const formatWatts = (w: number) => `${Math.round(w * 10) / 10}W`
 export const wattLabel = (l: Pick<Light, 'kind' | 'watt' | 'length' | 'size'>) =>
   l.watt == null ? null : `${l.kind === 'strip' ? `${tubesFor(l)}×` : ''}${formatWatts(l.watt)}`
 
+/** A fan's blade sweep in inches, as fans are sold: "46″". */
+export const fanSizeLabel = (l: Pick<Light, 'length'>) => `${Math.round(l.length / 25.4)}″`
+
 /** "3000K", or "3CCT" for tri-colour. */
 export const tempLabel = (t: LightTemp) => (t === 'tri' ? '3CCT' : `${t}K`)
 

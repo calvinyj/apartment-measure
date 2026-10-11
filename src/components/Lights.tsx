@@ -1,4 +1,4 @@
-import { direction, lightCentre, lightEnds, tempLabel, wattLabel } from '../geometry/lights'
+import { direction, fanSizeLabel, lightCentre, lightEnds, tempLabel, wattLabel } from '../geometry/lights'
 import { pointInPolygon } from '../geometry/polygon'
 import { add, outward, scale, sub } from '../geometry/vec'
 import type { Light, LightKind, LightTemp, Vec2 } from '../types'
@@ -22,6 +22,11 @@ const roundRadius = (l: Drawn, ke: number) =>
 
 /** How far from its centre an eyeball's arrow reaches, in mm. */
 const aimReach = (l: Drawn, ke: number) => Math.max(24 / ke, roundRadius(l, ke) + 16 / ke)
+
+/** Where a fan's blade a° round from its angle reaches: most of the way out to its sweep. */
+const bladeTip = (l: Drawn, c: Vec2, a: number) => add(c, scale(direction(l.angle + a), (l.length / 2) * 0.85))
+
+const BLADES = [0, 120, 240]
 
 /**
  * One light at c, drawn in mm at a size that reads on screen (`ke` = screen px per mm), or at
@@ -114,8 +119,8 @@ function LightSymbol({ l, c, ke }: { l: Drawn; c: Vec2; ke: number }) {
             pointerEvents="none"
             {...thin}
           />
-          {[0, 120, 240].map((a) => {
-            const tip = add(c, scale(direction(l.angle + a), r * 0.85))
+          {BLADES.map((a) => {
+            const tip = bladeTip(l, c, a)
             return (
               <line
                 key={a}
@@ -154,6 +159,28 @@ const spanning = (pts: Vec2[], pad: number): Box => ({
   y1: Math.max(...pts.map((p) => p.y)) + pad,
 })
 
+const grow = (o: Box, d: number): Box => ({ x0: o.x0 - d, y0: o.y0 - d, x1: o.x1 + d, y1: o.y1 + d })
+
+/** Whether the line from a to b passes through box o. */
+function crosses(a: Vec2, b: Vec2, o: Box) {
+  const d = sub(b, a)
+  let t0 = 0
+  let t1 = 1
+  for (const [p, q] of [
+    [-d.x, a.x - o.x0],
+    [d.x, o.x1 - a.x],
+    [-d.y, a.y - o.y0],
+    [d.y, o.y1 - a.y],
+  ]) {
+    if (p === 0) {
+      if (q < 0) return false
+    } else if (p < 0) t0 = Math.max(t0, q / p)
+    else t1 = Math.min(t1, q / p)
+    if (t0 > t1) return false
+  }
+  return true
+}
+
 /** p turned about the origin by deg, clockwise on screen (as SVG's rotate). */
 export function turn(p: Vec2, deg: number): Vec2 {
   const cos = Math.cos(deg * RAD)
@@ -180,6 +207,31 @@ function symbolBoxes(l: Light, c: Vec2, ke: number, rot: number): { body: Box; a
   if (l.kind !== 'eyeball') return { body }
   const tip = turn(add(c, scale(direction(l.angle), aimReach(l, ke))), rot)
   return { body, arrow: spanning([q, tip], 4 / ke) }
+}
+
+/**
+ * Spots for a fan's label (w × h, upright on screen) between its blades: on each line halfway
+ * between two blades, just far enough out to clear the hub and both blades by `gap`; the lowest
+ * on screen first.
+ */
+function fanSpots(l: Light, c: Vec2, ke: number, rot: number, w: number, h: number, gap: number): Box[] {
+  const q = turn(c, rot)
+  const hub = around(q, 5 / ke, 5 / ke)
+  const blades = BLADES.map((a) => turn(bladeTip(l, c, a), rot))
+  // A blade is 5px wide, so its middle line keeps half that further off.
+  const clear = (o: Box) =>
+    !overlap(grow(o, gap), hub) && blades.every((tip) => !crosses(q, tip, grow(o, gap + 2.5 / ke)))
+  return [60, 180, 300]
+    .map((a) => direction(l.angle + a + rot))
+    .sort((u, v) => v.y - u.y)
+    .map((d) => {
+      const at = (t: number) => around(add(q, scale(d, t)), w / 2, h / 2)
+      // Past the blade tips, it's clear of them however wide it is.
+      const far = l.length / 2 + w + h
+      let t = 0
+      while (t < far && !clear(at(t))) t += 1 / ke
+      return at(t)
+    })
 }
 
 /** Something else on the plan for labels to keep off: centred on c, half sizes upright on screen, in mm. */
@@ -209,10 +261,11 @@ const tempClass = (t: LightTemp) => (t === 'tri' ? '' : t <= 3000 ? ' warm' : t 
 const COVERS = { light: 4, label: 4, room: 3, wall: 2 }
 
 /**
- * Each light's power and colour temperature, upright on screen (the view is turned by `rot`). A
- * label goes under its light or over it (centred, or lined up with either side), or beside it
- * (first, for a light running down the screen): wherever covers least of the lights, the labels
- * already placed and `avoid` (room labels), and stays inside the light's room when `outlines` are given.
+ * Each light's power and colour temperature (and a fan's size), upright on screen (the view is
+ * turned by `rot`). A label goes under its light or over it (centred, or lined up with either
+ * side), or beside it (first, for a light running down the screen); a fan's goes between its
+ * blades. It goes wherever covers least of the lights, the labels already placed and `avoid`
+ * (room labels), and stays inside the light's room when `outlines` are given.
  */
 function SpecLabels({
   placed,
@@ -238,10 +291,11 @@ function SpecLabels({
     things.reduce((sum, t) => sum + (overlap(o, t.box) ? t.cost : 0), 0)
   // Every spot each label could go, and what it covers before any labels are down.
   const wanted = placed.flatMap(({ l, c }, i) => {
-    const watt = wattLabel(l)
+    // Its power, and a fan's size (e.g. "40W 46″"), then the colour temperature, coloured.
+    const text = [wattLabel(l), l.kind === 'fan' ? fanSizeLabel(l) : null].filter(Boolean).join(' ')
     const temp = l.temp == null ? null : tempLabel(l.temp)
-    if (!watt && !temp) return []
-    const w = [watt, temp].filter(Boolean).join(' ').length * fs * 0.6
+    if (!text && !temp) return []
+    const w = [text, temp].filter(Boolean).join(' ').length * fs * 0.6
     const h = fs * 1.1
     const b = symbols[i].body
     const q = turn(c, rot)
@@ -260,7 +314,12 @@ function SpecLabels({
     ]
     const overUnder = spans.flatMap((x) => rows.map((y) => ({ ...x, ...y })))
     const tall = b.y1 - b.y0 > (b.x1 - b.x0) * 1.5
-    const options = tall ? [...sides, ...overUnder] : [...overUnder, ...sides]
+    const options =
+      l.kind === 'fan'
+        ? fanSpots(l, c, ke, rot, w, h, gap)
+        : tall
+          ? [...sides, ...overUnder]
+          : [...overUnder, ...sides]
     const outline = outlines?.get(l.roomId)
     const outside = (o: Box) =>
       !!outline &&
@@ -271,7 +330,7 @@ function SpecLabels({
         { x: o.x0, y: o.y1 },
       ].some((p) => !pointInPolygon(turn(p, -rot), outline))
     const base = options.map((o) => covers(o, fixed) + (outside(o) ? COVERS.wall : 0))
-    return [{ l, watt, temp, options, base, free: base.filter((x) => x === 0).length }]
+    return [{ l, text, temp, options, base, free: base.filter((x) => x === 0).length }]
   })
   // The most hemmed in go first, so the others make way for them.
   const labels: { box: Box; cost: number }[] = []
@@ -285,7 +344,7 @@ function SpecLabels({
   return (
     // Drawn in the screen's frame: mm turned back by the view's rotation.
     <g transform={rot ? `rotate(${-rot})` : undefined} pointerEvents="none">
-      {wanted.map(({ l, watt, temp }) => {
+      {wanted.map(({ l, text, temp }) => {
         const box = chosen.get(l.id)!
         return (
           <text
@@ -296,8 +355,8 @@ function SpecLabels({
             textAnchor="middle"
             className="plan-label spec"
           >
-            {watt}
-            {watt && temp && ' '}
+            {text}
+            {text && temp && ' '}
             {temp && <tspan className={`temp${tempClass(l.temp!)}`}>{temp}</tspan>}
           </text>
         )
@@ -323,8 +382,8 @@ function Handle({ p, ke, id }: { p: Vec2; ke: number; id: string }) {
 }
 
 /**
- * The lights and fans over the floor plan, in mm, optionally with their power and colour
- * temperature (`specs`), placed clear of `avoid` and inside each light's room. Interactive, each light is a drag target (`l:<id>`), and the selected
+ * The lights and fans over the floor plan, in mm, optionally with their power, colour
+ * temperature and a fan's size (`specs`), placed clear of `avoid` and inside each light's room. Interactive, each light is a drag target (`l:<id>`), and the selected
  * one gets handles: an eyeball's aim (`a:<id>`) and the ends of a pendant or LED tube (`e0:<id>`, `e1:<id>`).
  */
 export function LightLayer({

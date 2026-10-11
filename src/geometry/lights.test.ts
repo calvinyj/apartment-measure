@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { DEFAULT_SETTINGS, type Edge, type Light, type Project, type Room } from '../types'
 import {
   fanSizeFor,
+  fanSizeLabel,
   FAN_SIZES,
   fixtureList,
   isRound,
@@ -183,6 +184,8 @@ describe('lights', () => {
     expect(wattLabel(light({ kind: 'strip', watt: 16, length: 2960, size: 1200 }))).toBe('3×16W')
     expect(wattLabel(light({ watt: 16.25 }))).toBe('16.3W')
     expect(wattLabel(light({}))).toBeNull()
+    expect(fanSizeLabel(light({ kind: 'fan', length: 1170 }))).toBe('46″')
+    expect(fanSizeLabel(light({ kind: 'fan', length: 1320 }))).toBe('52″')
     expect(tempLabel(3000)).toBe('3000K')
     expect(tempLabel('tri')).toBe('3CCT')
     expect(isRound(light({ kind: 'surface' }))).toBe(true)
