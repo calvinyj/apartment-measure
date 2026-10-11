@@ -8,7 +8,7 @@ import { centroid } from '../geometry/polygon'
 import { useStore } from '../store'
 import { roomTypeInfo, type Vec2 } from '../types'
 import { formatArea } from '../units'
-import { PlanImageToggle, useSolved } from './common'
+import { PlanImageToggle, useRememberedCheck, useSolved } from './common'
 import { CompassBadge } from './Compass'
 
 const M = 1 / 1000 // scene units are metres
@@ -181,8 +181,8 @@ function CameraRig({ center, size, resetKey }: { center: THREE.Vector3; size: nu
 export function Viewer3D() {
   const project = useStore((s) => s.project)
   const solved = useSolved()
-  const [cutaway, setCutaway] = useState(false)
-  const [labels, setLabels] = useState(true)
+  const [cutaway, setCutaway] = useRememberedCheck('3d:cutaway', false)
+  const [labels, setLabels] = useRememberedCheck('3d:labels', true)
   const [resetKey, setResetKey] = useState(0)
   const labelLayer = useRef<HTMLDivElement>(null)
   const needle = useRef<SVGGElement>(null)

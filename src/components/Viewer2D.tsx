@@ -3,7 +3,7 @@ import { normDeg } from '../geometry/facing'
 import { roomAnchors } from '../geometry/lights'
 import { useStore } from '../store'
 import { LIGHT_KINDS, type Light, type PlugPoint } from '../types'
-import { PlanImageToggle, useSolved } from './common'
+import { PlanImageToggle, useRememberedCheck, useSolved } from './common'
 import { CompassBadge } from './Compass'
 import { FloorPlan, roomLabelBoxes, useFloorPlan } from './FloorPlan'
 import { LightIcon, lightBoxes, LightLayer } from './Lights'
@@ -14,11 +14,11 @@ export function Viewer2D() {
   const project = useStore((s) => s.project)
   const { north } = project
   const solved = useSolved()
-  const [labels, setLabels] = useState(true)
-  const [dims, setDims] = useState(true)
-  const [lights, setLights] = useState(true)
-  const [specs, setSpecs] = useState(true)
-  const [plugs, setPlugs] = useState(true)
+  const [labels, setLabels] = useRememberedCheck('2d:labels', true)
+  const [dims, setDims] = useRememberedCheck('2d:dims', true)
+  const [lights, setLights] = useRememberedCheck('2d:lights', true)
+  const [specs, setSpecs] = useRememberedCheck('2d:specs', true)
+  const [plugs, setPlugs] = useRememberedCheck('2d:plugs', true)
   const [rotation, setRotation] = useState(0)
   const [resetKey, setResetKey] = useState(0)
   const plan = useFloorPlan(solved)
