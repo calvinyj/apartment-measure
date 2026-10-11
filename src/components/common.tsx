@@ -11,6 +11,31 @@ export function useSolved() {
   return useMemo(() => solveProject(project), [project.rooms, project.calibration, project.settings, project.north])
 }
 
+/**
+ * A view's checkbox, remembered on this device (in localStorage) when you leave the tab or reload,
+ * and the same for every layout. It isn't part of the layout, so ticking it isn't an edit to save.
+ */
+export function useRememberedCheck(key: string, initial: boolean): [boolean, (on: boolean) => void] {
+  const storageKey = `apartment-measure:check:${key}`
+  const [on, setOn] = useState(() => {
+    try {
+      const v = localStorage.getItem(storageKey)
+      return v == null ? initial : v === '1'
+    } catch {
+      return initial
+    }
+  })
+  const set = (v: boolean) => {
+    setOn(v)
+    try {
+      localStorage.setItem(storageKey, v ? '1' : '0')
+    } catch {
+      // private mode etc.; only a convenience
+    }
+  }
+  return [on, set]
+}
+
 const DIGITS: Record<LengthUnit, number> = { mm: 0, cm: 1, m: 3 }
 const show = (mm: number | null, unit: LengthUnit) => (mm == null ? '' : String(Number(toUnit(mm, unit).toFixed(DIGITS[unit]))))
 
