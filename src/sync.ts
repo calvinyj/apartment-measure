@@ -64,6 +64,7 @@ function show(id: string, project: Project, revision: number, imageVersion: numb
     saveState: dirty ? 'pending' : 'saved',
     selectedRoomId: null,
     wizard: null,
+    cabinetEdit: null,
   })
   remember(id)
 }

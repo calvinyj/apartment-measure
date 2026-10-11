@@ -3,6 +3,7 @@ import { DEFAULT_TUBE } from './geometry/lights'
 import { signedArea } from './geometry/polygon'
 import {
   DEFAULT_SETTINGS,
+  type Cabinet,
   type Calibration,
   type Edge,
   type Light,
@@ -32,6 +33,7 @@ export const emptyProject = (name = 'My apartment'): Project => ({
   north: null,
   lights: [],
   plugs: [],
+  cabinets: [],
 })
 
 /** Accepts current and older saved/exported shapes. */
@@ -58,13 +60,15 @@ export function normalizeProject(raw: unknown): Project {
         }))
       : [],
     plugs: Array.isArray(p.plugs) ? p.plugs.map((x) => ({ ...x, note: x.note ?? '' })) : [],
+    cabinets: Array.isArray(p.cabinets) ? p.cabinets : [],
     image: img ? { src: img.src ?? img.dataUrl ?? '', width: img.width, height: img.height } : null,
     settings: { ...DEFAULT_SETTINGS, ...p.settings },
   }
 }
 
-export type Tab = 'layouts' | 'plan' | 'measure' | '2d' | '3d' | 'lighting' | 'report' | 'settings'
+export type Tab = 'layouts' | 'plan' | 'measure' | '2d' | '3d' | 'lighting' | 'cabinets' | 'report' | 'settings'
 export type WizardStep = 'room' | number | 'summary'
+export type CabinetStep = 'walls' | 'type' | 'size' | 'fronts' | 'top' | 'finish' | 'review'
 export type SaveState = 'saved' | 'pending' | 'saving' | 'offline' | 'conflict' | 'error'
 
 interface State {
@@ -82,10 +86,13 @@ interface State {
   tab: Tab
   selectedRoomId: string | null
   wizard: { roomId: string; step: WizardStep } | null
+  /** the cabinet open on the Cabinets tab (null id: a new one, until its wall is picked), and its step */
+  cabinetEdit: { id: string | null; step: CabinetStep } | null
 
   setTab: (t: Tab) => void
   select: (id: string | null) => void
   setWizard: (w: State['wizard']) => void
+  setCabinetEdit: (e: State['cabinetEdit']) => void
 
   setName: (name: string) => void
   setCalibration: (c: Calibration | null) => void
@@ -113,6 +120,10 @@ interface State {
   addPlug: (plug: Omit<PlugPoint, 'id'>) => string
   updatePlug: (id: string, patch: Partial<PlugPoint>) => void
   removePlug: (id: string) => void
+
+  addCabinet: (cabinet: Omit<Cabinet, 'id'>) => string
+  updateCabinet: (id: string, patch: Partial<Cabinet>) => void
+  removeCabinet: (id: string) => void
 }
 
 const mapRoom = (p: Project, id: string, f: (r: Room) => Room): Project => ({
@@ -141,10 +152,12 @@ export const useStore = create<State>((set, get) => {
     tab: 'layouts',
     selectedRoomId: null,
     wizard: null,
+    cabinetEdit: null,
 
     setTab: (tab) => set({ tab }),
     select: (selectedRoomId) => set({ selectedRoomId }),
     setWizard: (wizard) => set({ wizard }),
+    setCabinetEdit: (cabinetEdit) => set({ cabinetEdit }),
 
     setName: (name) => edit((p) => ({ ...p, name })),
     setCalibration: (calibration) => edit((p) => ({ ...p, calibration })),
@@ -245,6 +258,20 @@ export const useStore = create<State>((set, get) => {
     updatePlug: (id, patch) =>
       edit((p) => ({ ...p, plugs: p.plugs.map((x) => (x.id === id ? { ...x, ...patch } : x)) })),
     removePlug: (id) => edit((p) => ({ ...p, plugs: p.plugs.filter((x) => x.id !== id) })),
+
+    addCabinet: (cabinet) => {
+      const id = uid()
+      edit((p) => ({ ...p, cabinets: [...p.cabinets, { ...cabinet, id }] }))
+      return id
+    },
+    updateCabinet: (id, patch) =>
+      edit((p) => ({ ...p, cabinets: p.cabinets.map((c) => (c.id === id ? { ...c, ...patch } : c)) })),
+    removeCabinet: (id) =>
+      set((s) => ({
+        project: { ...s.project, cabinets: s.project.cabinets.filter((c) => c.id !== id) },
+        dirty: true,
+        cabinetEdit: s.cabinetEdit?.id === id ? null : s.cabinetEdit,
+      })),
   }
 })
 

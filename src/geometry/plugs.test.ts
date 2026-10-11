@@ -33,6 +33,7 @@ function project(rooms: Room[]): Project {
     north: null,
     lights: [],
     plugs: [],
+    cabinets: [],
     name: 't',
     image: null,
     calibration: { a: { x: 0, y: 0 }, b: { x: 100, y: 0 }, mm: 1000 },
