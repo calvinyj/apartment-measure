@@ -5,10 +5,39 @@ import { legPoint, outline, type Placement } from '../cabinets/placement'
 import { doorSpace, layOut, moveDivider, samePath, type LaidCell, type LaidDivider, type Rect } from '../cabinets/sections'
 import { bbox } from '../geometry/polygon'
 import type { ApplianceKind, Cabinet, CabinetSection, Cutout, Vec2 } from '../types'
+import { parseHexColor } from './common'
 
 const INK = '#3f4652'
 const MUTED = '#6b7280'
 const ACCENT = '#2563eb'
+/** Lines drawn on a finish, and fainter ones (door swings, rails). */
+export interface Ink {
+  line: string
+  faint: string
+}
+
+const DARK_INK: Ink = { line: INK, faint: MUTED }
+const LIGHT_INK: Ink = { line: '#f3f4f6', faint: '#b9c0ca' }
+
+/** Relative luminance of a hex colour (0 black to 1 white), as WCAG defines it. */
+function luminance(hex: string) {
+  const [r, g, b] = [1, 3, 5].map((i) => {
+    const v = parseInt(hex.slice(i, i + 2), 16) / 255
+    return v <= 0.04045 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4
+  })
+  return 0.2126 * r + 0.7152 * g + 0.0722 * b
+}
+
+const contrast = (a: number, b: number) => (Math.max(a, b) + 0.05) / (Math.min(a, b) + 0.05)
+
+/** Lines that show up on this finish: dark ones on a light finish, light ones on a dark finish. */
+export function inkOn(fill: string): Ink {
+  const hex = parseHexColor(fill)
+  if (!hex) return DARK_INK
+  const l = luminance(hex)
+  return contrast(l, luminance(LIGHT_INK.line)) > contrast(l, luminance(INK)) ? LIGHT_INK : DARK_INK
+}
+
 /** Gap between legs in the unfolded elevation, mm. */
 const LEG_GAP = 240
 /** Gap between neighbouring fronts, mm. */
@@ -68,7 +97,7 @@ const line = (x1: number, y1: number, x2: number, y2: number, props: Record<stri
 )
 
 /** Shelves, and a hanging rail under the top shelf (or near the top), inside a compartment. */
-function Inside({ r, shelves, rail, k }: { r: Rect; shelves: number; rail: boolean; k: number }) {
+function Inside({ r, shelves, rail, k, ink }: { r: Rect; shelves: number; rail: boolean; k: number; ink: Ink }) {
   const ys = rail
     ? Array.from({ length: shelves }, (_, i) => r.y + Math.min(300 * (i + 1), (r.h * (i + 1)) / (shelves + 2)))
     : Array.from({ length: shelves }, (_, i) => r.y + (r.h * (i + 1)) / (shelves + 1))
@@ -80,7 +109,7 @@ function Inside({ r, shelves, rail, k }: { r: Rect; shelves: number; rail: boole
       ))}
       {railY != null && (
         <>
-          {line(r.x + 20, railY, r.x + r.w - 20, railY, { stroke: MUTED, strokeWidth: 2.5, strokeLinecap: 'round' })}
+          {line(r.x + 20, railY, r.x + r.w - 20, railY, { stroke: ink.faint, strokeWidth: 2.5, strokeLinecap: 'round' })}
           {r.h > 600 &&
             Array.from({ length: Math.max(1, Math.floor((r.w - 80) / 120)) }, (_, i) => {
               const x = r.x + 60 + i * 120
@@ -96,7 +125,7 @@ function Inside({ r, shelves, rail, k }: { r: Rect; shelves: number; rail: boole
               )
             })}
           {r.w * k > 70 && (
-            <text x={r.x + r.w / 2} y={railY + 14 / k} fontSize={10 / k} textAnchor="middle" fill={MUTED}>
+            <text x={r.x + r.w / 2} y={railY + 14 / k} fontSize={10 / k} textAnchor="middle" fill={ink.faint}>
               hanging
             </text>
           )}
@@ -109,24 +138,38 @@ function Inside({ r, shelves, rail, k }: { r: Rect; shelves: number; rail: boole
 /** Where a handle goes on a front: near the top of a base cabinet's, the bottom of a wall cabinet's, else the middle. */
 type HandleAt = 'top' | 'middle' | 'bottom'
 
-function Handle({ c, r, side, at, horizontal }: { c: Cabinet; r: Rect; side: 'left' | 'right' | 'centre'; at: HandleAt; horizontal?: boolean }) {
+function Handle({
+  c,
+  r,
+  side,
+  at,
+  horizontal,
+  ink,
+}: {
+  c: Cabinet
+  r: Rect
+  side: 'left' | 'right' | 'centre'
+  at: HandleAt
+  horizontal?: boolean
+  ink: Ink
+}) {
   if (c.handle === 'none') return null
   if (c.handle === 'profile') {
     const y = at === 'bottom' ? r.y + r.h - 6 : r.y + 6
-    return line(r.x, y, r.x + r.w, y, { stroke: INK, strokeWidth: 2, pointerEvents: 'none' })
+    return line(r.x, y, r.x + r.w, y, { stroke: ink.line, strokeWidth: 2, pointerEvents: 'none' })
   }
   const x = side === 'left' ? r.x + 40 : side === 'right' ? r.x + r.w - 40 : r.x + r.w / 2
   const y = at === 'top' ? r.y + Math.min(120, r.h * 0.2) : at === 'bottom' ? r.y + r.h - Math.min(120, r.h * 0.2) : r.y + r.h / 2
-  if (c.handle === 'knob') return <circle cx={x} cy={y} r={12} fill={INK} pointerEvents="none" />
+  if (c.handle === 'knob') return <circle cx={x} cy={y} r={12} fill={ink.line} pointerEvents="none" />
   const len = horizontal ? Math.min(r.w * 0.4, 200) : Math.min(r.h * 0.3, 160)
   return horizontal
-    ? line(x - len / 2, y, x + len / 2, y, { stroke: INK, strokeWidth: 3, strokeLinecap: 'round', pointerEvents: 'none' })
-    : line(x, y - len / 2, x, y + len / 2, { stroke: INK, strokeWidth: 3, strokeLinecap: 'round', pointerEvents: 'none' })
+    ? line(x - len / 2, y, x + len / 2, y, { stroke: ink.line, strokeWidth: 3, strokeLinecap: 'round', pointerEvents: 'none' })
+    : line(x, y - len / 2, x, y + len / 2, { stroke: ink.line, strokeWidth: 3, strokeLinecap: 'round', pointerEvents: 'none' })
 }
 
 /** A door leaf with its opening lines: they meet at the hinge side. */
-function Leaf({ c, r, hinge, at }: { c: Cabinet; r: Rect; hinge: 'left' | 'right' | 'top'; at: HandleAt }) {
-  const dash = { stroke: MUTED, strokeWidth: 0.8, strokeDasharray: '6 4', pointerEvents: 'none' }
+function Leaf({ c, r, hinge, at, ink }: { c: Cabinet; r: Rect; hinge: 'left' | 'right' | 'top'; at: HandleAt; ink: Ink }) {
+  const dash = { stroke: ink.faint, strokeWidth: 0.8, strokeDasharray: '6 4', pointerEvents: 'none' }
   return (
     <>
       {hinge === 'left' && (
@@ -153,6 +196,7 @@ function Leaf({ c, r, hinge, at }: { c: Cabinet; r: Rect; hinge: 'left' | 'right
         side={hinge === 'left' ? 'right' : hinge === 'right' ? 'left' : 'centre'}
         at={hinge === 'top' ? 'bottom' : at}
         horizontal={hinge === 'top'}
+        ink={ink}
       />
     </>
   )
@@ -163,7 +207,10 @@ function CellFront({ c, laid, k, inside }: { c: Cabinet; laid: LaidCell; k: numb
   const { cell } = laid
   const r = inset(laid.rect)
   const at: HandleAt = c.kind === 'wall' ? 'bottom' : c.kind === 'base' || c.kind === 'vanity' ? 'top' : 'middle'
-  const front = { fill: c.fronts.color, stroke: INK, strokeWidth: 1, vectorEffect: 'non-scaling-stroke' as const }
+  // Lines on the fronts, and on the carcass inside, that show up on their finish.
+  const ink = inkOn(c.fronts.color)
+  const inner = inkOn(c.carcass.color)
+  const front = { fill: c.fronts.color, stroke: ink.line, strokeWidth: 1, vectorEffect: 'non-scaling-stroke' as const }
   const label = (text: string) =>
     r.w * k > 50 && r.h * k > 18 ? (
       <text x={r.x + r.w / 2} y={r.y + r.h / 2} fontSize={11 / k} textAnchor="middle" dominantBaseline="middle" fill={INK} pointerEvents="none">
@@ -181,7 +228,7 @@ function CellFront({ c, laid, k, inside }: { c: Cabinet; laid: LaidCell; k: numb
           return (
             <g key={i}>
               <rect x={d.x} y={d.y} width={d.w} height={d.h} {...front} />
-              <Handle c={c} r={d} side="centre" at={h > 400 ? 'top' : 'middle'} horizontal />
+              <Handle c={c} r={d} side="centre" at={h > 400 ? 'top' : 'middle'} horizontal ink={ink} />
             </g>
           )
         })}
@@ -201,9 +248,9 @@ function CellFront({ c, laid, k, inside }: { c: Cabinet; laid: LaidCell; k: numb
   if (cell.front === 'open')
     return (
       <>
-        <rect x={r.x} y={r.y} width={r.w} height={r.h} fill={c.carcass.color} stroke={INK} strokeWidth={1} vectorEffect="non-scaling-stroke" />
+        <rect x={r.x} y={r.y} width={r.w} height={r.h} fill={c.carcass.color} stroke={inner.line} strokeWidth={1} vectorEffect="non-scaling-stroke" />
         <rect x={r.x} y={r.y} width={r.w} height={r.h} fill="#000" fillOpacity={0.07} pointerEvents="none" />
-        <Inside r={r} shelves={cell.shelves} rail={cell.rail} k={k} />
+        <Inside r={r} shelves={cell.shelves} rail={cell.rail} k={k} ink={inner} />
       </>
     )
 
@@ -220,7 +267,7 @@ function CellFront({ c, laid, k, inside }: { c: Cabinet; laid: LaidCell; k: numb
         <>
           <rect x={r.x} y={r.y} width={r.w} height={r.h} fill={c.carcass.color} />
           <rect x={r.x} y={r.y} width={r.w} height={r.h} fill="#000" fillOpacity={0.07} />
-          <Inside r={r} shelves={cell.shelves} rail={cell.rail} k={k} />
+          <Inside r={r} shelves={cell.shelves} rail={cell.rail} k={k} ink={inner} />
         </>
       )}
       {fixed && <rect x={fixed.x} y={fixed.y} width={fixed.w} height={fixed.h} {...front} opacity={inside ? 0.45 : 1} />}
@@ -233,14 +280,14 @@ function CellFront({ c, laid, k, inside }: { c: Cabinet; laid: LaidCell; k: numb
             {cell.hinge === 'sliding' ? (
               <>
                 {r.w * k > 60 && (
-                  <text x={g.x + g.w / 2} y={g.y + g.h / 2} fontSize={14 / k} textAnchor="middle" dominantBaseline="middle" fill={MUTED} pointerEvents="none">
+                  <text x={g.x + g.w / 2} y={g.y + g.h / 2} fontSize={14 / k} textAnchor="middle" dominantBaseline="middle" fill={ink.faint} pointerEvents="none">
                     {i === 0 ? '→' : '←'}
                   </text>
                 )}
-                <Handle c={c} r={g} side={i === 0 ? 'right' : 'left'} at="middle" />
+                <Handle c={c} r={g} side={i === 0 ? 'right' : 'left'} at="middle" ink={ink} />
               </>
             ) : (
-              <Leaf c={c} r={g} hinge={hinge as 'left' | 'right' | 'top'} at={at} />
+              <Leaf c={c} r={g} hinge={hinge as 'left' | 'right' | 'top'} at={at} ink={ink} />
             )}
           </g>
         )
@@ -551,6 +598,8 @@ export function TopView({ cabinet: c, placement: p, className = 'cab-drawing' }:
   )
   const carcass = outline(p, D).map(turn)
   const stone = c.top ? outline(p, stoneDepth).map(turn) : null
+  // Dashed lines are drawn over the stone, else the fronts (a wall cabinet's outline only).
+  const onTop = c.top ? inkOn(c.top.finish.color) : c.kind === 'wall' ? DARK_INK : inkOn(c.fronts.color)
   const cutouts = (c.top?.cutouts ?? []).flatMap((x) => {
     const leg = p.legs[x.leg]
     if (!leg) return []
@@ -592,9 +641,9 @@ export function TopView({ cabinet: c, placement: p, className = 'cab-drawing' }:
           vectorEffect="non-scaling-stroke"
         />
         {stone && <polygon points={pts(stone)} fill={c.top!.finish.color} stroke={INK} strokeWidth={1.2} vectorEffect="non-scaling-stroke" />}
-        {stone && <polygon points={pts(carcass)} fill="none" stroke={MUTED} strokeWidth={0.8} strokeDasharray="4 3" vectorEffect="non-scaling-stroke" />}
+        {stone && <polygon points={pts(carcass)} fill="none" stroke={onTop.faint} strokeWidth={0.8} strokeDasharray="4 3" vectorEffect="non-scaling-stroke" />}
         {seams.map(([a, b2], i) => (
-          <line key={i} x1={a.x} y1={a.y} x2={b2.x} y2={b2.y} stroke={MUTED} strokeWidth={0.8} strokeDasharray="4 3" vectorEffect="non-scaling-stroke" />
+          <line key={i} x1={a.x} y1={a.y} x2={b2.x} y2={b2.y} stroke={onTop.faint} strokeWidth={0.8} strokeDasharray="4 3" vectorEffect="non-scaling-stroke" />
         ))}
         {cutouts.map(({ x, corners, centre }) => (
           <g key={x.id}>
