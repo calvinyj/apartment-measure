@@ -1274,6 +1274,35 @@ details.more summary {
   white-space: nowrap;
 }
 
+/* Floats over the 2D plan, bottom middle, while measuring. */
+.measure-chip {
+  position: absolute;
+  left: 50%;
+  bottom: 12px;
+  transform: translateX(-50%);
+  max-width: calc(100% - 128px);
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 4px 10px;
+  padding: 8px 14px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+  font-size: 0.9rem;
+  text-align: center;
+}
+
+.measure-chip b {
+  font-size: 1.05rem;
+}
+
+.plan-label.measure-label {
+  fill: #1d4ed8;
+}
+
 /* Floats over the 2D plan, top left. */
 .plan-legend {
   position: absolute;
