@@ -1,14 +1,17 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { normDeg } from '../geometry/facing'
 import { roomAnchors } from '../geometry/lights'
+import { snapMeasure, type MeasureSnap } from '../geometry/measure'
+import { scale } from '../geometry/vec'
 import { useStore } from '../store'
-import { LIGHT_KINDS, type Light, type PlugPoint } from '../types'
+import { LIGHT_KINDS, type Light, type PlugPoint, type Vec2 } from '../types'
 import { CabinetIcon, CabinetLayer, PLAN_LEVEL_LABEL, placeCabinets, type PlacedCabinet, type PlanLevel } from './CabinetLayer'
 import { PlanImageToggle, useRememberedCheck, useSolved } from './common'
 import { CompassBadge } from './Compass'
 import { FloorPlan, roomLabelBoxes, useFloorPlan } from './FloorPlan'
 import { LightIcon, lightBoxes, LightLayer } from './Lights'
-import { PlanView } from './PlanView'
+import { MeasureChip, MeasureMarks, measureTargets } from './MeasureTool'
+import { PlanView, type PointerInfo } from './PlanView'
 import { placePlugs, plugBoxes, PlugIcon, PlugLayer } from './Plugs'
 
 export function Viewer2D() {
@@ -28,6 +31,42 @@ export function Viewer2D() {
   const outlines = useMemo(() => new Map(solved.rooms.map((r) => [r.room.id, r.outline])), [solved])
   const placedCabinets = useMemo(() => placeCabinets(project.cabinets, solved), [project.cabinets, solved])
   const mmPerPx = solved.mmPerPx
+
+  // Measuring: tap two points for the length between them. The view is in plan image px, so taps are
+  // turned into mm by the plan's scale, then snapped to what's drawn near them.
+  const [measuring, setMeasuring] = useState(false)
+  const [ends, setEnds] = useState<MeasureSnap[]>([])
+  const [hover, setHover] = useState<MeasureSnap | null>(null)
+  /** screen px per mm, as last drawn: how near a tap must be to snap */
+  const keRef = useRef(1)
+  const targets = useMemo(
+    () => (measuring ? measureTargets(solved, plan, cabinets ? placedCabinets : []) : { corners: [], lines: [] }),
+    [measuring, solved, plan, cabinets, placedCabinets],
+  )
+  const snapAt = (px: Vec2, info: PointerInfo, from: Vec2 | null): MeasureSnap => {
+    const q = scale(px, mmPerPx ?? 1)
+    return info.altKey ? { p: q, to: 'free', straight: false } : snapMeasure(q, from, targets, 12 / keRef.current)
+  }
+  const onMeasureTap = (px: Vec2, info: PointerInfo) =>
+    setEnds(ends.length === 1 ? [ends[0], snapAt(px, info, ends[0].p)] : [snapAt(px, info, null)])
+  const onMeasureHover = (px: Vec2 | null, info: PointerInfo) =>
+    setHover(px ? snapAt(px, info, ends.length === 1 ? ends[0].p : null) : null)
+  const stopMeasuring = () => {
+    setMeasuring(false)
+    setEnds([])
+    setHover(null)
+  }
+  // Esc clears the measurement, then stops measuring.
+  useEffect(() => {
+    if (!measuring) return
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape') return
+      if (ends.length) setEnds([])
+      else stopMeasuring()
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [measuring, ends.length])
 
   if (!plan || !mmPerPx) {
     return (
@@ -69,6 +108,14 @@ export function Viewer2D() {
         )}
         <PlanImageToggle />
         <button
+          className={`btn small${measuring ? ' primary' : ''}`}
+          aria-pressed={measuring}
+          title="Tap two points on the plan for the length between them"
+          onClick={() => (measuring ? stopMeasuring() : setMeasuring(true))}
+        >
+          Measure
+        </button>
+        <button
           className="btn small"
           title="Turn left 90° (or drag with the right mouse button, or twist with two fingers)"
           aria-label="Turn left 90°"
@@ -108,12 +155,19 @@ export function Viewer2D() {
           fitKey={String(resetKey)}
           rotation={rotation}
           onRotate={setRotation}
+          cursor={measuring ? 'crosshair' : undefined}
+          onTap={measuring ? onMeasureTap : undefined}
+          onHover={measuring ? onMeasureHover : undefined}
           overlay={
-            <Legend lights={lights ? project.lights : []} plugs={plugs ? project.plugs : []} cabinets={cabinets ? placedCabinets : []} />
+            <>
+              <Legend lights={lights ? project.lights : []} plugs={plugs ? project.plugs : []} cabinets={cabinets ? placedCabinets : []} />
+              {measuring && <MeasureChip ends={ends} hover={hover} unit={project.settings.inputUnit} onClear={() => setEnds([])} />}
+            </>
           }
         >
           {(k, rot) => {
             const ke = k / mmPerPx
+            keRef.current = ke
             const roomLabels = labels ? roomLabelBoxes(plan, ke) : []
             const placed = plugs
               ? placePlugs(project.plugs, solved, anchors, ke, rot, [
@@ -147,6 +201,7 @@ export function Viewer2D() {
                   />
                 )}
                 <PlugLayer placed={placed} ke={ke} rot={rot} />
+                {measuring && <MeasureMarks ends={ends} hover={hover} ke={ke} rot={rot} unit={project.settings.inputUnit} />}
               </g>
             )
           }}

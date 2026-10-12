@@ -40,18 +40,21 @@ export function placeCabinets(cabinets: Cabinet[], solved: Solved): PlacedCabine
 
 const pts = (ps: Vec2[]) => ps.map((q) => `${q.x},${q.y}`).join(' ')
 
+/** A cabinet's outline on the plan: a base cabinet's top (with its overhang), else its carcass. */
+export const planOutline = ({ c, p, level }: PlacedCabinet) => outline(p, level === 'below' ? c.depth + (c.top?.overhang ?? 0) : c.depth)
+
 /** A cabinet from above on the plan, in mm. */
 function CabinetShape({ c, p, level }: PlacedCabinet) {
   const line = { stroke: EDGE, strokeWidth: 1, vectorEffect: 'non-scaling-stroke' as const, strokeLinejoin: 'round' as const }
   if (level === 'above')
-    return <polygon points={pts(outline(p, c.depth))} fill={c.fronts.color} fillOpacity={0.2} {...line} strokeDasharray="6 4" />
+    return <polygon points={pts(planOutline({ c, p, level }))} fill={c.fronts.color} fillOpacity={0.2} {...line} strokeDasharray="6 4" />
 
   if (level === 'cut') {
     // Cut through like the walls, and crossed along each wall as tall units are on a drawing.
     const ink = inkOn(c.fronts.color)
     return (
       <g>
-        <polygon points={pts(outline(p, c.depth))} fill={c.fronts.color} {...line} strokeWidth={1.5} />
+        <polygon points={pts(planOutline({ c, p, level }))} fill={c.fronts.color} {...line} strokeWidth={1.5} />
         {p.legs.map((leg, k) => {
           const u0 = leg.from + leg.cornerLeft
           const [a, b, cc, d] = [legPoint(leg, u0), legPoint(leg, leg.to), legPoint(leg, leg.to, c.depth), legPoint(leg, u0, c.depth)]
@@ -70,7 +73,7 @@ function CabinetShape({ c, p, level }: PlacedCabinet) {
   const depth = c.depth + (c.top?.overhang ?? 0)
   return (
     <g>
-      <polygon points={pts(outline(p, depth))} fill={c.top ? c.top.finish.color : c.fronts.color} {...line} />
+      <polygon points={pts(planOutline({ c, p, level }))} fill={c.top ? c.top.finish.color : c.fronts.color} {...line} />
       {(c.top?.cutouts ?? []).map((x) => {
         const leg = p.legs[x.leg]
         if (!leg) return null
