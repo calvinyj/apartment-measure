@@ -3,6 +3,7 @@ import { normDeg } from '../geometry/facing'
 import { roomAnchors } from '../geometry/lights'
 import { useStore } from '../store'
 import { LIGHT_KINDS, type Light, type PlugPoint } from '../types'
+import { CabinetIcon, CabinetLayer, PLAN_LEVEL_LABEL, placeCabinets, type PlacedCabinet, type PlanLevel } from './CabinetLayer'
 import { PlanImageToggle, useRememberedCheck, useSolved } from './common'
 import { CompassBadge } from './Compass'
 import { FloorPlan, roomLabelBoxes, useFloorPlan } from './FloorPlan'
@@ -19,11 +20,13 @@ export function Viewer2D() {
   const [lights, setLights] = useRememberedCheck('2d:lights', true)
   const [specs, setSpecs] = useRememberedCheck('2d:specs', true)
   const [plugs, setPlugs] = useRememberedCheck('2d:plugs', true)
+  const [cabinets, setCabinets] = useRememberedCheck('2d:cabinets', true)
   const [rotation, setRotation] = useState(0)
   const [resetKey, setResetKey] = useState(0)
   const plan = useFloorPlan(solved)
   const anchors = useMemo(() => roomAnchors(solved), [solved])
   const outlines = useMemo(() => new Map(solved.rooms.map((r) => [r.room.id, r.outline])), [solved])
+  const placedCabinets = useMemo(() => placeCabinets(project.cabinets, solved), [project.cabinets, solved])
   const mmPerPx = solved.mmPerPx
 
   if (!plan || !mmPerPx) {
@@ -57,6 +60,11 @@ export function Viewer2D() {
         {project.plugs.length > 0 && (
           <label className="check small">
             <input type="checkbox" checked={plugs} onChange={(e) => setPlugs(e.target.checked)} /> Plug points
+          </label>
+        )}
+        {project.cabinets.length > 0 && (
+          <label className="check small">
+            <input type="checkbox" checked={cabinets} onChange={(e) => setCabinets(e.target.checked)} /> Cabinets
           </label>
         )}
         <PlanImageToggle />
@@ -100,7 +108,9 @@ export function Viewer2D() {
           fitKey={String(resetKey)}
           rotation={rotation}
           onRotate={setRotation}
-          overlay={<Legend lights={lights ? project.lights : []} plugs={plugs ? project.plugs : []} />}
+          overlay={
+            <Legend lights={lights ? project.lights : []} plugs={plugs ? project.plugs : []} cabinets={cabinets ? placedCabinets : []} />
+          }
         >
           {(k, rot) => {
             const ke = k / mmPerPx
@@ -123,6 +133,7 @@ export function Viewer2D() {
                   dims={dims}
                   unit={project.settings.inputUnit}
                   avoid={plugBoxes(placed)}
+                  onFloor={cabinets && <CabinetLayer placed={placedCabinets} />}
                 />
                 {lights && (
                   <LightLayer
@@ -146,15 +157,16 @@ export function Viewer2D() {
 }
 
 /**
- * What the symbols on the plan are: each kind of light and fan, and plug points, that's shown. It
+ * What the symbols on the plan are: each kind of light and fan, plug points and cabinets, that's shown. It
  * starts folded on a narrow screen, where it would cover much of the plan; open, the plan fits beside it.
  */
-function Legend({ lights, plugs }: { lights: Light[]; plugs: PlugPoint[] }) {
+function Legend({ lights, plugs, cabinets }: { lights: Light[]; plugs: PlugPoint[]; cabinets: PlacedCabinet[] }) {
   const [open, setOpen] = useState(() => window.matchMedia('(min-width: 700px)').matches)
   const kinds = LIGHT_KINDS.filter((k) => lights.some((l) => l.kind === k.value))
   const existing = plugs.some((p) => p.existing)
   const added = plugs.some((p) => !p.existing)
-  if (!kinds.length && !plugs.length) return null
+  const levels = (['below', 'cut', 'above'] as PlanLevel[]).filter((l) => cabinets.some((x) => x.level === l))
+  if (!kinds.length && !plugs.length && !levels.length) return null
   const toggle = (
     <button className="legend-toggle" aria-expanded={open} onClick={() => setOpen(!open)}>
       Legend <span aria-hidden>{open ? '▾' : '▸'}</span>
@@ -183,6 +195,12 @@ function Legend({ lights, plugs }: { lights: Light[]; plugs: PlugPoint[] }) {
             New plug point
           </li>
         )}
+        {levels.map((l) => (
+          <li key={l}>
+            <CabinetIcon level={l} />
+            {PLAN_LEVEL_LABEL[l]}
+          </li>
+        ))}
       </ul>
       {plugs.length > 0 && <p className="muted">The number is how many sockets.</p>}
     </div>
