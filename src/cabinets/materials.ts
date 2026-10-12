@@ -2,7 +2,7 @@ import { area } from '../geometry/polygon'
 import { dist } from '../geometry/vec'
 import type { ApplianceKind, Cabinet, CabinetCell, CutoutKind } from '../types'
 import { carcassLength, outline, type Placement } from './placement'
-import { layOut } from './sections'
+import { doorSpace, layOut } from './sections'
 
 /** A sheet of board, 8 × 4 ft, mm². */
 export const SHEET = 2440 * 1220
@@ -69,7 +69,7 @@ export const hingesFor = (h: number) => (h <= 900 ? 2 : h <= 1600 ? 3 : h <= 200
 const SHELF_SETBACK = 20
 const DRAWER_BACK = 50
 
-/** Leaves of a door compartment this wide: a pair, sliding doors and lift-ups are two (one lift-up if narrow). */
+/** Leaves of doors this wide (beside any fixed panel): a pair, sliding doors and lift-ups are two (one lift-up if narrow). */
 export const doorLeaves = (c: CabinetCell, w: number) => (c.hinge === 'pair' || c.hinge === 'sliding' ? 2 : c.hinge === 'lift' && w > 1200 ? 2 : 1)
 
 /**
@@ -116,7 +116,7 @@ export function cabinetMaterials(c: Cabinet, p: Placement): CabinetMaterials {
         if (cell.rail) m.rails++
       }
       if (cell.front === 'door') {
-        const leaves = doorLeaves(cell, w)
+        const leaves = doorLeaves(cell, doorSpace(cell, rect).doors.w)
         m.doors += leaves
         if (cell.hinge === 'sliding') m.slidingDoors += leaves
         else if (cell.hinge === 'lift') m.liftUps += leaves

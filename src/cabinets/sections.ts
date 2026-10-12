@@ -51,6 +51,18 @@ export interface Rect {
   h: number
 }
 
+/** Whether a compartment has a fixed panel beside its doors: hinged doors can, lift-up and sliding ones can't. */
+export const hasFixed = (c: CabinetCell) => c.front === 'door' && !!c.fixed && c.hinge !== 'lift' && c.hinge !== 'sliding'
+
+/** A door compartment's fixed panel, if it has one, and the space left for its doors (at least MIN_PART wide). */
+export function doorSpace(c: CabinetCell, r: Rect): { fixed: Rect | null; doors: Rect } {
+  const w = hasFixed(c) ? Math.min(c.fixedWidth ?? r.w / 2, r.w - MIN_PART) : 0
+  if (w <= 0) return { fixed: null, doors: r }
+  return c.fixed === 'left'
+    ? { fixed: { ...r, w }, doors: { ...r, x: r.x + w, w: r.w - w } }
+    : { fixed: { ...r, x: r.x + r.w - w, w }, doors: { ...r, w: r.w - w } }
+}
+
 /** A compartment laid out on the front: x from the left, y down from the top of the carcass. */
 export interface LaidCell {
   path: number[]

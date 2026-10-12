@@ -3,7 +3,7 @@ import { cutsFor } from '../geometry/walls'
 import type { Cabinet, Cutout, LengthUnit } from '../types'
 import { formatLength } from '../units'
 import type { Placement } from './placement'
-import { layOut, type LaidCell } from './sections'
+import { doorSpace, layOut, type LaidCell } from './sections'
 
 /** An opening with its bottom below this is a doorway (or a gap down to the floor); higher up, a window. */
 const DOOR_SILL = 300
@@ -80,7 +80,7 @@ export function cabinetWarnings(solved: Solved, c: Cabinet, p: Placement, unit: 
         if (rect.w / 2 > WIDE_SLIDING + 0.5) wideSliding += 2
       } else if (cell.front === 'door' && cell.hinge !== 'lift') {
         const leaves = cell.hinge === 'pair' ? 2 : 1
-        if (rect.w / leaves > WIDE_DOOR + 0.5) wideDoors += leaves
+        if (doorSpace(cell, rect).doors.w / leaves > WIDE_DOOR + 0.5) wideDoors += leaves
       }
       if (cell.front === 'drawers') {
         if (rect.w > WIDE_DRAWER + 0.5) wideDrawers++

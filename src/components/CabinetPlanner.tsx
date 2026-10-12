@@ -1,9 +1,11 @@
 import { useEffect, useMemo, useState } from 'react'
 import { cabinetTop, cabinetWarnings, cellUnder } from '../cabinets/checks'
 import { applyTemplate, createCabinet, freshName, frontsEdited, tapWall, withWalls } from '../cabinets/edit'
-import { cabinetMaterials } from '../cabinets/materials'
+import { cabinetMaterials, doorLeaves } from '../cabinets/materials'
 import { legPoint, outline, placeCabinet, shapeLabel, type Placement } from '../cabinets/placement'
 import {
+  doorSpace,
+  hasFixed,
   isSplit,
   layOut,
   movePart,
@@ -75,6 +77,12 @@ const HINGES: { value: DoorHinge; label: string }[] = [
   { value: 'sliding', label: 'Sliding' },
 ]
 
+const FIXED: { value: 'none' | 'left' | 'right'; label: string }[] = [
+  { value: 'none', label: 'None' },
+  { value: 'left', label: 'Left' },
+  { value: 'right', label: 'Right' },
+]
+
 const MOUNTS: { value: CabinetMount; label: string }[] = [
   { value: 'plinth', label: 'On a plinth' },
   { value: 'legs', label: 'On legs' },
@@ -104,10 +112,17 @@ export function CabinetPlanner() {
   const plan = useFloorPlan(solved)
   const [sel, setSel] = useState<CellRef | null>(null)
   const [inside, setInside] = useRememberedCheck('cabinet-inside', true)
+  // The cabinet whose walls taps on the plan change: one just added, or after Change walls. Others stay put.
+  const [pickingId, setPickingId] = useState<string | null>(null)
 
   const cab = edit?.id ? (project.cabinets.find((c) => c.id === edit.id) ?? null) : null
   const step = edit?.step ?? null
   useEffect(() => setSel(null), [cab?.id])
+  useEffect(() => {
+    if (step !== 'walls') setPickingId(null)
+  }, [step])
+  const picking = !!cab && pickingId === cab.id
+  const setPicking = (on: boolean) => setPickingId(on && cab ? cab.id : null)
 
   if (!plan || !solved.mmPerPx) {
     return (
@@ -149,7 +164,7 @@ export function CabinetPlanner() {
           </div>
         </div>
       ) : (
-        <CabinetPlan solved={solved} plan={plan} current={cab} />
+        <CabinetPlan solved={solved} plan={plan} current={cab} picking={picking} onCreated={setPickingId} />
       )}
       <aside className="panel">
         {!edit || (edit.id && !cab) ? (
@@ -157,7 +172,7 @@ export function CabinetPlanner() {
         ) : !cab ? (
           <NewCabinet />
         ) : step === 'walls' || !p ? (
-          <WallsStep c={cab} solved={solved} placed={placed!} />
+          <WallsStep c={cab} solved={solved} placed={placed!} picking={picking} setPicking={setPicking} />
         ) : step === 'type' ? (
           <TypeStep c={cab} solved={solved} />
         ) : step === 'size' ? (
@@ -176,20 +191,36 @@ export function CabinetPlanner() {
   )
 }
 
-/** The floor plan with every cabinet on it, from above. Tap a cabinet to open it; while placing one, tap its walls. */
-function CabinetPlan({ solved, plan, current }: { solved: Solved; plan: FloorPlanData; current: Cabinet | null }) {
+/**
+ * The floor plan with every cabinet on it, from above. Tap a cabinet to open it. Taps pick walls only for a
+ * new cabinet, or after Change walls, so one already set up can't be moved by a stray tap.
+ */
+function CabinetPlan({
+  solved,
+  plan,
+  current,
+  picking,
+  onCreated,
+}: {
+  solved: Solved
+  plan: FloorPlanData
+  current: Cabinet | null
+  picking: boolean
+  onCreated: (id: string) => void
+}) {
   const project = useStore((s) => s.project)
   const edit = useStore((s) => s.cabinetEdit)
   const { addCabinet, updateCabinet, setCabinetEdit } = useStore.getState()
   const mmPerPx = solved.mmPerPx!
-  const placing = edit?.step === 'walls'
+  const onWalls = edit?.step === 'walls'
+  const live = onWalls && (!current || picking)
   const [error, setError] = useState<string | null>(null)
 
   const onTap = (raw: Vec2, info: PointerInfo) => {
     setError(null)
     const hit = info.handle?.startsWith('cab:') ? info.handle.slice(4) : null
-    if (!placing) {
-      if (hit) setCabinetEdit({ id: hit, step: 'review' })
+    if (!live) {
+      if (hit && hit !== current?.id) setCabinetEdit({ id: hit, step: 'review' })
       return
     }
     const pt = scale(raw, mmPerPx)
@@ -201,6 +232,7 @@ function CabinetPlan({ solved, plan, current }: { solved: Solved; plan: FloorPla
       if (!c) return setError('That side is open (no wall). Pick a wall.')
       const id = addCabinet(c)
       setCabinetEdit({ id, step: 'walls' })
+      onCreated(id)
       return
     }
     const patch = tapWall(solved, current, r, spot.edge)
@@ -215,7 +247,7 @@ function CabinetPlan({ solved, plan, current }: { solved: Solved; plan: FloorPla
         showImage={project.settings.showPlanImage}
         fit={plan.fit}
         fitKey="cabinets"
-        cursor={placing ? 'crosshair' : 'default'}
+        cursor={live ? 'crosshair' : 'default'}
         onTap={onTap}
       >
         {(k) => {
@@ -226,7 +258,7 @@ function CabinetPlan({ solved, plan, current }: { solved: Solved; plan: FloorPla
               {project.cabinets.map((c) => (
                 <Footprint key={c.id} c={c} solved={solved} on={c.id === current?.id} />
               ))}
-              {placing && room && <WallNumbers r={room} ke={ke} current={current} solved={solved} />}
+              {onWalls && room && <WallNumbers r={room} ke={ke} current={current} solved={solved} />}
             </g>
           )
         }}
@@ -413,16 +445,36 @@ function Warnings({ c, solved, p }: { c: Cabinet; solved: Solved; p: Placement }
   )
 }
 
+/** The steps, and the cabinet's name with Delete beside it (on every step, for one added by mistake). */
 function Header({ c, step }: { c: Cabinet; step: CabinetStep }) {
+  const removeCabinet = useStore((s) => s.removeCabinet)
   return (
     <>
       <Steps c={c} step={step} />
-      <h2>{c.name}</h2>
+      <div className="row between">
+        <h2>{c.name}</h2>
+        <button className="link danger" onClick={() => confirm(`Delete ${c.name}?`) && removeCabinet(c.id)}>
+          Delete
+        </button>
+      </div>
     </>
   )
 }
 
-function WallsStep({ c, solved, placed }: { c: Cabinet; solved: Solved; placed: ReturnType<typeof placeCabinet> }) {
+function WallsStep({
+  c,
+  solved,
+  placed,
+  picking,
+  setPicking,
+}: {
+  c: Cabinet
+  solved: Solved
+  placed: ReturnType<typeof placeCabinet>
+  /** taps on the plan change its walls */
+  picking: boolean
+  setPicking: (on: boolean) => void
+}) {
   const unit = useStore((s) => s.project.settings.inputUnit)
   const updateCabinet = useStore((s) => s.updateCabinet)
   const walls = c.walls
@@ -434,16 +486,32 @@ function WallsStep({ c, solved, placed }: { c: Cabinet; solved: Solved; placed: 
   return (
     <div className="stack">
       <Header c={c} step="walls" />
-      <p className="muted">
-        Tap a wall on the plan to move it there. Tap the wall just past either end to turn the corner onto it (an L, then a U);
-        tap an end wall again to take it off.
-      </p>
       {!placed.ok && <div className="callout warn">{placed.error}</div>}
+      {p && (
+        <p>
+          <b>{shapeLabel(n)}</b> in {p.room.room.name}, along {n === 1 ? 'wall' : 'walls'} {p.legs.map((l) => l.wallNo).join(', ')}
+        </p>
+      )}
+      {picking ? (
+        <div className="callout">
+          <div>
+            Tap a wall on the plan to move it there. Tap the wall just past either end to turn the corner onto it (an L, then
+            a U); tap an end wall again to take it off.
+          </div>
+          <button className="btn small" onClick={() => setPicking(false)}>
+            Done changing walls
+          </button>
+        </div>
+      ) : (
+        <div className="row wrap">
+          <button className="btn small" onClick={() => setPicking(true)}>
+            Change walls
+          </button>
+          <span className="field-hint">To move it to another wall, or turn a corner onto the next.</span>
+        </div>
+      )}
       {p && first && last && (
         <>
-          <p>
-            <b>{shapeLabel(n)}</b> in {p.room.room.name}, along {n === 1 ? 'wall' : 'walls'} {p.legs.map((l) => l.wallNo).join(', ')}
-          </p>
           <Field
             label={`Starts from wall ${first.wallNo}’s left corner`}
             hint={
@@ -670,6 +738,7 @@ function FrontsStep({
   const i = path[path.length - 1]
   const size = split ? split.parts[i].size : null
   const shown = split?.split === 'across' ? me.rect.w : me.rect.h
+  const space = doorSpace(cell, me.rect)
   const patch = (x: Partial<typeof cell>) => setLeg(sel.leg, updateCell(front, path, x))
   const divide = (dir: 'across' | 'stack', n: number) => {
     setLeg(sel.leg, splitAt(front, path, dir, n))
@@ -741,6 +810,23 @@ function FrontsStep({
       {cell.front === 'door' && (
         <Field label="Doors open">
           <Segmented value={cell.hinge} options={HINGES} onChange={(h) => patch({ hinge: h })} />
+        </Field>
+      )}
+      {cell.front === 'door' && cell.hinge !== 'lift' && cell.hinge !== 'sliding' && (
+        <Field label="Fixed panel" hint="Where there's only room for one side to open, that side can be a panel that doesn't. The door then hinges on the far side.">
+          <Segmented
+            value={hasFixed(cell) ? cell.fixed! : 'none'}
+            options={FIXED}
+            onChange={(f) => patch(f === 'none' ? { fixed: undefined } : { fixed: f, hinge: f === 'left' ? 'right' : 'left' })}
+          />
+        </Field>
+      )}
+      {space.fixed && (
+        <Field
+          label="Panel width"
+          hint={`${cell.fixedWidth == null ? 'Half the compartment. ' : ''}Leaves ${mm(space.doors.w)} for the door${doorLeaves(cell, space.doors.w) > 1 ? 's' : ''}.`}
+        >
+          <LengthInput value={cell.fixedWidth ?? null} placeholder={space.fixed.w} unit={unit} onChange={(v) => patch({ fixedWidth: v })} />
         </Field>
       )}
       {cell.front === 'drawers' && (
@@ -1038,7 +1124,7 @@ function FinishStep({ c }: { c: Cabinet }) {
 function ReviewStep({ c, solved, p }: { c: Cabinet; solved: Solved; p: Placement }) {
   const unit = useStore((s) => s.project.settings.inputUnit)
   const cabinets = useStore((s) => s.project.cabinets)
-  const { addCabinet, removeCabinet, setCabinetEdit } = useStore.getState()
+  const { addCabinet, setCabinetEdit } = useStore.getState()
   const m = cabinetMaterials(c, p)
   const duplicate = () => {
     const names = cabinets.map((x) => x.name)
@@ -1046,9 +1132,6 @@ function ReviewStep({ c, solved, p }: { c: Cabinet; solved: Solved; p: Placement
     for (let n = 2; names.includes(name); n++) name = `${c.name} (copy ${n})`
     const id = addCabinet({ ...c, name, top: c.top && { ...c.top, cutouts: c.top.cutouts.map((x) => ({ ...x, id: uid() })) } })
     setCabinetEdit({ id, step: 'walls' })
-  }
-  const remove = () => {
-    if (confirm(`Delete ${c.name}?`)) removeCabinet(c.id)
   }
   return (
     <div className="stack">
@@ -1093,9 +1176,6 @@ function ReviewStep({ c, solved, p }: { c: Cabinet; solved: Solved; p: Placement
       <div className="row wrap">
         <button className="btn small" onClick={duplicate}>
           Duplicate
-        </button>
-        <button className="btn small danger" onClick={remove}>
-          Delete
         </button>
       </div>
       <Nav c={c} step="review" />

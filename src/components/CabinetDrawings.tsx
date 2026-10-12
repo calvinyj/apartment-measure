@@ -2,7 +2,7 @@ import { useLayoutEffect, useRef, useState, type PointerEvent as ReactPointerEve
 import { cabinetTop } from '../cabinets/checks'
 import { doorLeaves } from '../cabinets/materials'
 import { legPoint, outline, type Placement } from '../cabinets/placement'
-import { layOut, moveDivider, samePath, type LaidCell, type LaidDivider, type Rect } from '../cabinets/sections'
+import { doorSpace, layOut, moveDivider, samePath, type LaidCell, type LaidDivider, type Rect } from '../cabinets/sections'
 import { bbox } from '../geometry/polygon'
 import type { ApplianceKind, Cabinet, CabinetSection, Cutout, Vec2 } from '../types'
 
@@ -207,10 +207,13 @@ function CellFront({ c, laid, k, inside }: { c: Cabinet; laid: LaidCell; k: numb
       </>
     )
 
-  // Doors
-  const leaves = doorLeaves(cell, laid.rect.w)
-  const lw = r.w / leaves
-  const leafRects = Array.from({ length: leaves }, (_, i) => ({ x: r.x + i * lw, y: r.y, w: lw, h: r.h }))
+  // Doors, and a fixed panel beside them
+  const space = doorSpace(cell, laid.rect)
+  const fixed = space.fixed && inset(space.fixed)
+  const d = inset(space.doors)
+  const leaves = doorLeaves(cell, space.doors.w)
+  const lw = d.w / leaves
+  const leafRects = Array.from({ length: leaves }, (_, i) => ({ x: d.x + i * lw, y: d.y, w: lw, h: d.h }))
   return (
     <>
       {inside && (
@@ -220,6 +223,7 @@ function CellFront({ c, laid, k, inside }: { c: Cabinet; laid: LaidCell; k: numb
           <Inside r={r} shelves={cell.shelves} rail={cell.rail} k={k} />
         </>
       )}
+      {fixed && <rect x={fixed.x} y={fixed.y} width={fixed.w} height={fixed.h} {...front} opacity={inside ? 0.45 : 1} />}
       {leafRects.map((lr, i) => {
         const g = inset(lr, leaves > 1 ? GAP / 2 : 0)
         const hinge = cell.hinge === 'lift' ? 'top' : cell.hinge === 'pair' || cell.hinge === 'sliding' ? (i === 0 ? 'left' : 'right') : cell.hinge

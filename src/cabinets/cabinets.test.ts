@@ -5,7 +5,7 @@ import { cabinetWarnings, cellUnder } from './checks'
 import { applyTemplate, asTemplate, createCabinet, tapWall, withWalls } from './edit'
 import { addMaterials, allBoard, cabinetMaterials, innerBoard, outerBoard, sheetsFor } from './materials'
 import { outline, placeCabinet, type Placement } from './placement'
-import { across, cell, cellsOf, isSplit, layOut, moveDivider, movePart, partSizes, removeAt, sectionAt, setPartSize, splitAt, stack } from './sections'
+import { across, cell, cellsOf, doorSpace, isSplit, layOut, moveDivider, movePart, partSizes, removeAt, sectionAt, setPartSize, splitAt, stack } from './sections'
 import { DEFAULT_CARCASS, DEFAULT_FRONTS, KIND_SIZES, newWorktop, templateById, templateSize, TEMPLATES } from './templates'
 import { area } from '../geometry/polygon'
 
@@ -131,6 +131,16 @@ describe('compartments', () => {
     expect(movePart(front, [1], 'stack', 1)).toBeNull()
   })
 
+  it('puts a fixed panel beside hinged doors, half the compartment unless sized, leaving the doors at least 100 mm', () => {
+    const r = { x: 0, y: 0, w: 900, h: 700 }
+    expect(doorSpace(cell('door', { hinge: 'right', fixed: 'left' }), r)).toEqual({ fixed: { ...r, w: 450 }, doors: { ...r, x: 450, w: 450 } })
+    expect(doorSpace(cell('door', { hinge: 'left', fixed: 'right', fixedWidth: 300 }), r)).toEqual({ fixed: { ...r, x: 600, w: 300 }, doors: { ...r, w: 600 } })
+    expect(doorSpace(cell('door', { fixed: 'right', fixedWidth: 880 }), r).doors.w).toBe(100)
+    // Not beside sliding or lift-up doors, nor on other fronts.
+    expect(doorSpace(cell('door', { hinge: 'sliding', fixed: 'left' }), r)).toEqual({ fixed: null, doors: r })
+    expect(doorSpace(cell('open', { fixed: 'left' }), r)).toEqual({ fixed: null, doors: r })
+  })
+
   it('sets sizes and drags dividers, keeping each part at least 100 mm', () => {
     const front = across([null, cell('door')], [null, cell('drawers')])
     const set = setPartSize(front, [1], 333.4)
@@ -204,6 +214,13 @@ describe('warnings', () => {
     expect(w).toMatch(/sink is over drawers/)
     expect(cellUnder(c, placed(c), c.top!.cutouts[0])?.path).toEqual([1])
   })
+
+  it('measures a door beside a fixed panel by what the panel leaves it', () => {
+    const c = (fixedWidth: number) =>
+      cabinet({ walls: { roomId: 'K', edgeIds: ['e0'], start: 0, length: 1000 }, legs: [cell('door', { hinge: 'right', fixed: 'left', fixedWidth })] })
+    expect(warn(c(300)).join(' ')).toMatch(/1 door is over 600 mm wide/)
+    expect(warn(c(500))).toEqual([])
+  })
 })
 
 describe('materials', () => {
@@ -247,6 +264,21 @@ describe('materials', () => {
     const twice = addMaterials([m, m])
     expect(twice.drawers).toBe(6)
     expect(twice.top!.cutouts).toEqual({ sink: 2 })
+  })
+
+  it('counts a fixed panel as front board, with hinges and a handle only on the door beside it', () => {
+    const c = cabinet({
+      walls: { roomId: 'K', edgeIds: ['e0'], start: 0, length: 1000 },
+      legs: [cell('door', { hinge: 'right', fixed: 'left', fixedWidth: 400, shelves: 2 })],
+      height: 700,
+      depth: 600,
+    })
+    const m = cabinetMaterials(c, placed(c))
+    expect(m.board.fronts).toBe(1000 * 700)
+    expect(m.board.shelves).toBe(2 * 1000 * 580)
+    expect(m).toMatchObject({ doors: 1, hinges: 2, handles: 1, shelves: 2 })
+    const pair = cabinet({ ...c, legs: [cell('door', { hinge: 'pair', fixed: 'left', fixedWidth: 200 })] })
+    expect(cabinetMaterials(pair, placed(pair))).toMatchObject({ doors: 2, hinges: 4, handles: 2 })
   })
 
   it('rounds sheets up', () => {
@@ -316,6 +348,19 @@ describe('placing and reshaping by tapping walls', () => {
     expect(l.legs[0]).toEqual(cell('open', { shelves: 4 }))
     expect(l.legs).toHaveLength(2)
     expect(withWalls(s, c, { ...c.walls, start: 500 })).toEqual({ walls: { ...c.walls, start: 500 } })
+  })
+
+  it('moves to another wall with the compartments that were changed, not the template’s', () => {
+    // A U along walls 4, 1 and 2, changed; wall 3 isn't past either end, so tapping it moves the cabinet.
+    const u = { ...tap(tap(start(), 1), 3), legs: [cell('open', { shelves: 4 }), cell('drawers'), cell('door')] }
+    expect(u.top!.cutouts.map((x) => [x.kind, x.leg])).toEqual([
+      ['sink', 0],
+      ['hob', 2],
+    ])
+    const moved = tap(u, 2)
+    expect(moved.walls).toEqual({ roomId: 'K', edgeIds: ['e2'], start: 0, length: null })
+    expect(moved.legs).toEqual([cell('open', { shelves: 4 })])
+    expect(moved.top!.cutouts.map((x) => [x.kind, x.leg])).toEqual([['sink', 0]])
   })
 
   it('applies a template’s sizes, fronts and top', () => {
