@@ -1,5 +1,5 @@
 import polygonClipping, { type MultiPolygon, type Polygon } from 'polygon-clipping'
-import { useMemo } from 'react'
+import { useMemo, type ReactNode } from 'react'
 import { normDeg } from '../geometry/facing'
 import { bbox, centroid } from '../geometry/polygon'
 import { groupMeasured } from '../geometry/runs'
@@ -10,8 +10,8 @@ import { roomTypeInfo, type LengthUnit, type Vec2 } from '../types'
 import { formatArea, formatLength } from '../units'
 import type { FitBox } from './PlanView'
 
-/** The plan is cut through the walls at this height, as in the 3D cutaway. */
-const CUT = 1200
+/** The plan is cut through the walls (and tall cabinets) at this height, as in the 3D cutaway. */
+export const PLAN_CUT = 1200
 const WALL = '#3f4652'
 /** room labels' font size, screen px */
 const LABEL_PX = 13
@@ -49,7 +49,7 @@ function glassLine(r: SolvedRoom, piece: WallPiece): [Vec2, Vec2] {
   return [add(mid, scale(d, lo)), add(mid, scale(d, hi))]
 }
 
-/** Walls seen from above, cut at CUT. Doors and openings reach above the cut, so they leave a gap. */
+/** Walls seen from above, cut at PLAN_CUT. Doors and openings reach above the cut, so they leave a gap. */
 function wallPlan(solved: Solved): WallPlan {
   const solid: Polygon[] = []
   const windows: Polygon[] = []
@@ -59,8 +59,8 @@ function wallPlan(solved: Solved): WallPlan {
     for (const piece of roomWallPieces(solved, r, Infinity)) {
       const ring = [piece.footprint.map((p) => [p.x, p.y] as [number, number])]
       pts.push(...piece.footprint)
-      if (piece.y0 <= CUT && piece.y1 > CUT) solid.push(ring)
-      else if (piece.y0 === 0 && piece.y1 <= CUT) {
+      if (piece.y0 <= PLAN_CUT && piece.y1 > PLAN_CUT) solid.push(ring)
+      else if (piece.y0 === 0 && piece.y1 <= PLAN_CUT) {
         windows.push(ring)
         glass.push(glassLine(r, piece))
       }
@@ -218,9 +218,9 @@ export function useFloorPlan(solved: Solved): FloorPlanData | null {
 }
 
 /**
- * Floors, walls cut at CUT (windows framed, doors left open), and optionally room labels and
- * wall lengths, which keep off `avoid` (e.g. plug points). Drawn in mm; `ke` is screen px per mm
- * and `rot` the view's rotation.
+ * Floors, walls cut at PLAN_CUT (windows framed, doors left open), and optionally room labels and
+ * wall lengths, which keep off `avoid` (e.g. plug points). `onFloor` (e.g. cabinets) is drawn on the
+ * floors, under the walls and labels. Drawn in mm; `ke` is screen px per mm and `rot` the view's rotation.
  */
 export function FloorPlan({
   plan,
@@ -231,6 +231,7 @@ export function FloorPlan({
   dims,
   unit,
   avoid = [],
+  onFloor,
 }: {
   plan: FloorPlanData
   solved: Solved
@@ -240,6 +241,7 @@ export function FloorPlan({
   dims: boolean
   unit: LengthUnit
   avoid?: Obstacle[]
+  onFloor?: ReactNode
 }) {
   const fs = LABEL_PX / ke
   const { walls } = plan
@@ -266,6 +268,7 @@ export function FloorPlan({
           vectorEffect="non-scaling-stroke"
         />
       ))}
+      {onFloor}
       <path d={pathOf(walls.windows)} fill="#fff" stroke={WALL} strokeWidth={1} vectorEffect="non-scaling-stroke" />
       {walls.glass.map(([a, b], i) => (
         <line
