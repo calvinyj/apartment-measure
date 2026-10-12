@@ -179,6 +179,13 @@ export interface CabinetCell {
   front: CabinetFront
   /** how its doors open (door fronts) */
   hinge: DoorHinge
+  /**
+   * A panel that doesn't open, on this side of hinged doors: for where there's only room for one side
+   * to open. Unset = none.
+   */
+  fixed?: 'left' | 'right'
+  /** the fixed panel's width, mm; unset = half the compartment */
+  fixedWidth?: number | null
   /** drawers, stacked evenly (drawer fronts) */
   drawers: number
   /** adjustable shelves inside (doors or open) */

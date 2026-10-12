@@ -94,14 +94,14 @@ function rebuild(solved: Solved, c: Cabinet, walls: CabinetWalls): Partial<Cabin
 
 /**
  * Tapping a wall while placing a cabinet: the wall just past either end turns the corner onto it (up to
- * a U); an end wall it's already on is taken off again; any other wall moves it there, along all of it.
- * Null when the tap changes nothing.
+ * a U); an end wall it's already on is taken off again; any other wall moves it there, along all of it,
+ * taking its first leg's compartments (and cut-outs) along. Null when the tap changes nothing.
  */
 export function tapWall(solved: Solved, c: Cabinet, r: SolvedRoom, edge: number): Partial<Cabinet> | null {
   const g = groupOf(r.groups, edge)
   if (r.room.edges[g[0]].kind !== 'wall') return null
   const id = r.room.edges[g[0]].id
-  const moveHere = () => rebuild(solved, c, { roomId: r.room.id, edgeIds: [id], start: 0, length: null })
+  const moveHere = () => rewall(solved, c, { roomId: r.room.id, edgeIds: [id], start: 0, length: null }, [0])
   const res = resolveWalls(solved, c.walls)
   if (!res.ok || res.room.room.id !== r.room.id) return moveHere()
   const { groups } = res
