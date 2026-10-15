@@ -6,6 +6,7 @@ import {
   type Cabinet,
   type Calibration,
   type Edge,
+  type FurnitureItem,
   type Light,
   type Opening,
   type PlugPoint,
@@ -34,6 +35,7 @@ export const emptyProject = (name = 'My apartment'): Project => ({
   lights: [],
   plugs: [],
   cabinets: [],
+  furniture: [],
 })
 
 /** Accepts current and older saved/exported shapes. */
@@ -61,12 +63,23 @@ export function normalizeProject(raw: unknown): Project {
       : [],
     plugs: Array.isArray(p.plugs) ? p.plugs.map((x) => ({ ...x, note: x.note ?? '' })) : [],
     cabinets: Array.isArray(p.cabinets) ? p.cabinets : [],
+    furniture: Array.isArray(p.furniture) ? p.furniture : [],
     image: img ? { src: img.src ?? img.dataUrl ?? '', width: img.width, height: img.height } : null,
     settings: { ...DEFAULT_SETTINGS, ...p.settings },
   }
 }
 
-export type Tab = 'layouts' | 'plan' | 'measure' | '2d' | '3d' | 'lighting' | 'cabinets' | 'report' | 'settings'
+export type Tab =
+  | 'layouts'
+  | 'plan'
+  | 'measure'
+  | '2d'
+  | '3d'
+  | 'lighting'
+  | 'cabinets'
+  | 'furniture'
+  | 'report'
+  | 'settings'
 export type WizardStep = 'room' | number | 'summary'
 export type CabinetStep = 'walls' | 'type' | 'size' | 'fronts' | 'top' | 'finish' | 'review'
 export type SaveState = 'saved' | 'pending' | 'saving' | 'offline' | 'conflict' | 'error'
@@ -124,6 +137,11 @@ interface State {
   addCabinet: (cabinet: Omit<Cabinet, 'id'>) => string
   updateCabinet: (id: string, patch: Partial<Cabinet>) => void
   removeCabinet: (id: string) => void
+
+  addFurniture: (item: Omit<FurnitureItem, 'id'>) => string
+  /** one item, or several (e.g. all those at one spot) */
+  updateFurniture: (id: string | string[], patch: Partial<FurnitureItem>) => void
+  removeFurniture: (id: string) => void
 }
 
 const mapRoom = (p: Project, id: string, f: (r: Room) => Room): Project => ({
@@ -191,6 +209,7 @@ export const useStore = create<State>((set, get) => {
           rooms: s.project.rooms.filter((r) => r.id !== id),
           lights: s.project.lights.filter((l) => l.roomId !== id),
           plugs: s.project.plugs.filter((x) => x.roomId !== id),
+          furniture: s.project.furniture.filter((x) => x.roomId !== id),
         },
         dirty: true,
         selectedRoomId: s.selectedRoomId === id ? null : s.selectedRoomId,
@@ -272,6 +291,17 @@ export const useStore = create<State>((set, get) => {
         dirty: true,
         cabinetEdit: s.cabinetEdit?.id === id ? null : s.cabinetEdit,
       })),
+
+    addFurniture: (item) => {
+      const id = uid()
+      edit((p) => ({ ...p, furniture: [...p.furniture, { ...item, id }] }))
+      return id
+    },
+    updateFurniture: (id, patch) => {
+      const ids = typeof id === 'string' ? [id] : id
+      edit((p) => ({ ...p, furniture: p.furniture.map((x) => (ids.includes(x.id) ? { ...x, ...patch } : x)) }))
+    },
+    removeFurniture: (id) => edit((p) => ({ ...p, furniture: p.furniture.filter((x) => x.id !== id) })),
   }
 })
 

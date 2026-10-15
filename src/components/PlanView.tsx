@@ -24,6 +24,8 @@ interface Props {
   fit: FitBox | null
   /** refit whenever this changes */
   fitKey?: string
+  /** screen px to keep free either side of the plan when fitting it, e.g. for cards beside it */
+  fitAside?: number
   cursor?: string
   onTap?: (p: Vec2, info: PointerInfo) => void
   onHover?: (p: Vec2 | null, info: PointerInfo) => void
@@ -87,6 +89,7 @@ export function PlanView({
   showImage = true,
   fit,
   fitKey,
+  fitAside = 0,
   cursor,
   onTap,
   onHover,
@@ -125,14 +128,16 @@ export function PlanView({
     // Beside anything floating on the left (a legend), unless it takes too much of the width to leave room.
     const clear = svg.parentElement?.querySelector('[data-fit-clear]')?.getBoundingClientRect()
     const left = clear && clear.width < width * 0.35 ? clear.right - svg.getBoundingClientRect().left : 0
+    // Room beside it, as long as that leaves the plan most of the width.
+    const across = Math.max(width - left - 2 * fitAside, (width - left) * 0.4)
     // Fit the box as it lies once turned.
     const c = Math.abs(Math.cos(rotation * RAD))
     const sn = Math.abs(Math.sin(rotation * RAD))
-    const k = Math.min((width - left) / (fit.w * c + fit.h * sn), height / (fit.w * sn + fit.h * c)) * 0.92
+    const k = Math.min(across / (fit.w * c + fit.h * sn), height / (fit.w * sn + fit.h * c)) * 0.92
     const mid = { x: left + (width - left) / 2, y: height / 2 }
     commit(place({ x: fit.minX + fit.w / 2, y: fit.minY + fit.h / 2 }, mid, k, rotation))
     userMoved.current = false
-  }, [fit?.minX, fit?.minY, fit?.w, fit?.h, rotation])
+  }, [fit?.minX, fit?.minY, fit?.w, fit?.h, rotation, fitAside])
 
   // Rotation set from outside (a button): turn about the middle, or refit if the user hasn't moved the view.
   useLayoutEffect(() => {
@@ -146,6 +151,11 @@ export function PlanView({
   useLayoutEffect(() => {
     doFit()
   }, [fitKey, image?.src])
+
+  // Making room beside the plan (or no longer) refits it, unless the user has moved the view.
+  useLayoutEffect(() => {
+    if (!userMoved.current) doFit()
+  }, [fitAside])
 
   useEffect(() => {
     const svg = svgRef.current

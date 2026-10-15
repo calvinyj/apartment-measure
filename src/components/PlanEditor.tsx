@@ -680,7 +680,10 @@ function RoomInspector({ room, selVertex, clearVertex }: { room: Room; selVertex
         <button
           className="btn danger"
           onClick={() => {
-            if (confirm(`Delete ${room.name}?`)) deleteRoom(room.id)
+            // Furniture keeps what's been ordered, so say it goes too.
+            const n = useStore.getState().project.furniture.filter((x) => x.roomId === room.id).length
+            const also = n ? ` The ${n === 1 ? 'piece of furniture or appliance' : `${n} pieces of furniture and appliances`} in it go too.` : ''
+            if (confirm(`Delete ${room.name}?${also}`)) deleteRoom(room.id)
           }}
         >
           Delete room

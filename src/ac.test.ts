@@ -16,6 +16,7 @@ function zones(rooms: Room[]) {
     lights: [],
     plugs: [],
     cabinets: [],
+    furniture: [],
     name: 't',
     image: null,
     // 1 px = 10 mm

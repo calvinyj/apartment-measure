@@ -1618,3 +1618,88 @@ details.more summary {
 .row.divide .btn {
   min-width: 44px;
 }
+
+/* ---------- furniture & appliances ---------- */
+
+.status-icon {
+  width: 14px;
+  height: 14px;
+  display: block;
+  flex: none;
+}
+
+/* As wide as the other symbols in the legend, so the names line up (and not stretched like the plan's own svg). */
+.plan-legend .status-icon {
+  width: 14px;
+  height: 14px;
+  margin: 0 3px;
+}
+
+.furniture-name {
+  fill: var(--ink);
+}
+
+.furniture-name.unnamed {
+  fill: var(--muted);
+  font-style: italic;
+}
+
+.furniture-detail {
+  fill: var(--muted);
+}
+
+.furniture-card {
+  cursor: pointer;
+}
+
+.furniture-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.grid3 {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.grid3 + .field-hint {
+  margin-top: -6px;
+}
+
+.table tr.clickable {
+  cursor: pointer;
+}
+
+.table tr.clickable:hover td {
+  background: var(--accent-soft);
+}
+
+.furniture-totals {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  max-width: 360px;
+  font-size: 0.92rem;
+}
+
+.furniture-totals > div {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.furniture-totals .total {
+  border-top: 1px solid var(--line);
+  padding-top: 4px;
+  font-weight: 600;
+}
+
+.furniture-totals p {
+  margin: 0;
+}
+
+.furniture-price {
+  fill: #334155;
+}
