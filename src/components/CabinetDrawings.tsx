@@ -2,7 +2,7 @@ import { useLayoutEffect, useRef, useState, type PointerEvent as ReactPointerEve
 import { cabinetTop } from '../cabinets/checks'
 import { doorLeaves } from '../cabinets/materials'
 import { legPoint, outline, type Placement } from '../cabinets/placement'
-import { doorSpace, layOut, moveDivider, samePath, type LaidCell, type LaidDivider, type Rect } from '../cabinets/sections'
+import { doorSpace, insideSpace, layOut, moveDivider, samePath, type LaidCell, type LaidDivider, type Rect } from '../cabinets/sections'
 import { bbox } from '../geometry/polygon'
 import type { ApplianceKind, Cabinet, CabinetSection, Cutout, Vec2 } from '../types'
 import { parseHexColor } from './common'
@@ -135,6 +135,26 @@ function Inside({ r, shelves, rail, k, ink }: { r: Rect; shelves: number; rail: 
   )
 }
 
+/** Drawers inside a compartment, behind its doors: fronts of inside board, set in from the sides, with a finger pull. */
+function InsideDrawers({ r, n, fill, ink }: { r: Rect; n: number; fill: string; ink: Ink }) {
+  const h = r.h / n
+  return (
+    <g pointerEvents="none">
+      {Array.from({ length: n }, (_, i) => {
+        const d = inset({ x: r.x + 20, y: r.y + i * h, w: Math.max(0, r.w - 40), h })
+        const pull = Math.min(60, d.w * 0.15)
+        const y = d.y + Math.min(30, d.h * 0.2)
+        return (
+          <g key={i}>
+            <rect x={d.x} y={d.y} width={d.w} height={d.h} fill={fill} stroke={ink.line} strokeWidth={0.8} vectorEffect="non-scaling-stroke" />
+            {line(d.x + d.w / 2 - pull, y, d.x + d.w / 2 + pull, y, { stroke: ink.faint, strokeWidth: 2, strokeLinecap: 'round' })}
+          </g>
+        )
+      })}
+    </g>
+  )
+}
+
 /** Where a handle goes on a front: near the top of a base cabinet's, the bottom of a wall cabinet's, else the middle. */
 type HandleAt = 'top' | 'middle' | 'bottom'
 
@@ -261,13 +281,15 @@ function CellFront({ c, laid, k, inside }: { c: Cabinet; laid: LaidCell; k: numb
   const leaves = doorLeaves(cell, space.doors.w)
   const lw = d.w / leaves
   const leafRects = Array.from({ length: leaves }, (_, i) => ({ x: d.x + i * lw, y: d.y, w: lw, h: d.h }))
+  const behind = insideSpace(cell, laid.rect)
   return (
     <>
       {inside && (
         <>
           <rect x={r.x} y={r.y} width={r.w} height={r.h} fill={c.carcass.color} />
           <rect x={r.x} y={r.y} width={r.w} height={r.h} fill="#000" fillOpacity={0.07} />
-          <Inside r={r} shelves={cell.shelves} rail={cell.rail} k={k} ink={inner} />
+          <Inside r={inset(behind.above)} shelves={cell.shelves} rail={cell.rail} k={k} ink={inner} />
+          {behind.drawers && <InsideDrawers r={inset(behind.drawers)} n={behind.n} fill={c.carcass.color} ink={inner} />}
         </>
       )}
       {fixed && <rect x={fixed.x} y={fixed.y} width={fixed.w} height={fixed.h} {...front} opacity={inside ? 0.45 : 1} />}

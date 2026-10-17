@@ -63,6 +63,20 @@ export function doorSpace(c: CabinetCell, r: Rect): { fixed: Rect | null; doors:
     : { fixed: { ...r, x: r.x + r.w - w, w }, doors: { ...r, w: r.w - w } }
 }
 
+/** A drawer inside a door compartment is this high, unless their height is set. */
+export const DRAWER_INSIDE_H = 200
+
+/**
+ * A door compartment's drawers inside, at the bottom behind the doors, and the space left above them for
+ * shelves and hanging (at least MIN_PART high).
+ */
+export function insideSpace(c: CabinetCell, r: Rect): { n: number; drawers: Rect | null; above: Rect } {
+  const n = c.front === 'door' ? (c.insideDrawers ?? 0) : 0
+  if (n <= 0) return { n: 0, drawers: null, above: r }
+  const h = Math.max(0, Math.min(c.insideDrawersHeight ?? n * DRAWER_INSIDE_H, r.h - MIN_PART))
+  return { n, drawers: { ...r, y: r.y + r.h - h, h }, above: { ...r, h: r.h - h } }
+}
+
 /** A compartment laid out on the front: x from the left, y down from the top of the carcass. */
 export interface LaidCell {
   path: number[]
@@ -236,6 +250,30 @@ export function movePart(root: CabinetSection, path: number[], dir: 'across' | '
     return { root: replaceAt(root, split, () => ({ ...parent, parts })), path: moved, split, from, to }
   }
   return null
+}
+
+/**
+ * Put the drawers compartment at `path` behind the doors of the one above it in its stack: the doors run down
+ * over it, with its drawers inside at the bottom, and every other part keeps its size (`sizes` are the stack's
+ * parts as laid out). Null unless it's drawers right under doors that have none inside yet.
+ */
+export function putBehindDoors(root: CabinetSection, path: number[], sizes: number[]): { root: CabinetSection; path: number[] } | null {
+  if (!path.length) return null
+  const parentPath = path.slice(0, -1)
+  const parent = sectionAt(root, parentPath)
+  const i = path[path.length - 1]
+  if (!parent || !isSplit(parent) || parent.split !== 'stack' || i === 0) return null
+  const drawers = parent.parts[i].section
+  const doors = parent.parts[i - 1].section
+  if (isSplit(drawers) || drawers.front !== 'drawers' || isSplit(doors) || doors.front !== 'door' || doors.insideDrawers) return null
+  const cell: CabinetCell = { ...doors, insideDrawers: drawers.drawers, insideDrawersHeight: Math.round(sizes[i]) }
+  // The doors take on the drawers' height. They go on sharing what's left only if nothing else does, else
+  // the parts that do would grow.
+  const othersShare = parent.parts.some((p, j) => j !== i && j !== i - 1 && p.size == null)
+  const size = parent.parts[i - 1].size == null && !othersShare ? null : Math.round(sizes[i - 1] + sizes[i])
+  const parts = parent.parts.flatMap((p, j) => (j === i ? [] : j === i - 1 ? [{ size, section: cell }] : [p]))
+  if (parts.length === 1) return { root: replaceAt(root, parentPath, () => cell), path: parentPath }
+  return { root: replaceAt(root, parentPath, () => ({ ...parent, parts })), path: [...parentPath, i - 1] }
 }
 
 /** Every compartment of a front, in order. */

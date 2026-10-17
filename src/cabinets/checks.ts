@@ -3,7 +3,7 @@ import { cutsFor } from '../geometry/walls'
 import type { Cabinet, Cutout, LengthUnit } from '../types'
 import { formatLength } from '../units'
 import type { Placement } from './placement'
-import { doorSpace, layOut, type LaidCell } from './sections'
+import { doorSpace, insideSpace, layOut, MIN_PART, type LaidCell } from './sections'
 
 /** An opening with its bottom below this is a doorway (or a gap down to the floor); higher up, a window. */
 const DOOR_SILL = 300
@@ -69,6 +69,7 @@ export function cabinetWarnings(solved: Solved, c: Cabinet, p: Placement, unit: 
   let wideSliding = 0
   let wideDrawers = 0
   let lowDrawers = 0
+  let tallInside = 0
   let over = 0
   p.legs.forEach((leg, k) => {
     const front = c.legs[k]
@@ -86,6 +87,12 @@ export function cabinetWarnings(solved: Solved, c: Cabinet, p: Placement, unit: 
         if (rect.w > WIDE_DRAWER + 0.5) wideDrawers++
         if (rect.h / cell.drawers < LOW_DRAWER) lowDrawers++
       }
+      const inside = insideSpace(cell, rect)
+      if (inside.drawers) {
+        if (rect.w > WIDE_DRAWER + 0.5) wideDrawers++
+        if (inside.drawers.h / inside.n < LOW_DRAWER) lowDrawers++
+        if ((cell.insideDrawersHeight ?? 0) > rect.h - MIN_PART + 0.5) tallInside++
+      }
     }
   })
   if (over > 0.5) out.push('Some compartments are set wider (or taller) than the space they’re in.')
@@ -93,6 +100,10 @@ export function cabinetWarnings(solved: Solved, c: Cabinet, p: Placement, unit: 
   if (wideSliding) out.push(`${plural(wideSliding, 'sliding door')} ${wideSliding === 1 ? 'is' : 'are'} over ${WIDE_SLIDING} mm wide.`)
   if (wideDrawers) out.push(`${plural(wideDrawers, 'drawer stack')} ${wideDrawers === 1 ? 'is' : 'are'} over ${WIDE_DRAWER} mm wide.`)
   if (lowDrawers) out.push(`${plural(lowDrawers, 'drawer stack')} ${lowDrawers === 1 ? 'has' : 'have'} fronts under ${LOW_DRAWER} mm high.`)
+  if (tallInside)
+    out.push(
+      `The drawers inside ${tallInside === 1 ? 'one compartment' : `${tallInside} compartments`} are set too tall, leaving under ${MIN_PART} mm over them; they’re drawn shorter.`,
+    )
 
   if (c.top) {
     const stoneDepth = c.depth + c.top.overhang
@@ -108,8 +119,9 @@ export function cabinetWarnings(solved: Solved, c: Cabinet, p: Placement, unit: 
       if ((stoneDepth - x.depth) / 2 < MIN_STONE_EDGE)
         out.push(`The ${what} cut-out leaves less than ${MIN_STONE_EDGE} mm of stone in front of it.`)
       const under = cellUnder(c, p, x)
-      if (under && x.kind !== 'hob' && (under.cell.front === 'drawers' || under.cell.front === 'appliance'))
-        out.push(`The ${what} is over ${under.cell.front === 'drawers' ? 'drawers' : 'an appliance'}; the bowl and pipes need that space.`)
+      const drawers = under && (under.cell.front === 'drawers' || insideSpace(under.cell, under.rect).n > 0)
+      if (under && x.kind !== 'hob' && (drawers || under.cell.front === 'appliance'))
+        out.push(`The ${what} is over ${drawers ? 'drawers' : 'an appliance'}; the bowl and pipes need that space.`)
       if (under && x.kind === 'hob' && under.cell.front === 'appliance' && under.cell.appliance !== 'oven')
         out.push(`The hob is over the ${under.cell.appliance}.`)
       if (under && x.kind !== 'hob' && x.width > under.rect.w - 2 * c.board)

@@ -5,7 +5,24 @@ import { cabinetWarnings, cellUnder } from './checks'
 import { applyTemplate, asTemplate, createCabinet, tapWall, withWalls } from './edit'
 import { addMaterials, allBoard, cabinetMaterials, innerBoard, outerBoard, sheetsFor } from './materials'
 import { outline, placeCabinet, type Placement } from './placement'
-import { across, cell, cellsOf, doorSpace, isSplit, layOut, moveDivider, movePart, partSizes, removeAt, sectionAt, setPartSize, splitAt, stack } from './sections'
+import {
+  across,
+  cell,
+  cellsOf,
+  doorSpace,
+  insideSpace,
+  isSplit,
+  layOut,
+  moveDivider,
+  movePart,
+  partSizes,
+  putBehindDoors,
+  removeAt,
+  sectionAt,
+  setPartSize,
+  splitAt,
+  stack,
+} from './sections'
 import { DEFAULT_CARCASS, DEFAULT_FRONTS, KIND_SIZES, newWorktop, templateById, templateSize, TEMPLATES } from './templates'
 import { area } from '../geometry/polygon'
 
@@ -142,6 +159,35 @@ describe('compartments', () => {
     expect(doorSpace(cell('open', { fixed: 'left' }), r)).toEqual({ fixed: null, doors: r })
   })
 
+  it('puts drawers behind the doors above them, every other part keeping its size', () => {
+    // A wardrobe column: a top cupboard, hanging, and 2 drawers.
+    const col = stack([810, cell('door')], [null, cell('door', { rail: true })], [600, cell('drawers', { drawers: 2 })])
+    const moved = putBehindDoors(col, [2], layOut(col, { x: 0, y: 0, w: 900, h: 2925 }).splits[0].sizes)!
+    expect(moved.path).toEqual([1])
+    expect(isSplit(moved.root) && moved.root.parts.map((p) => p.size)).toEqual([810, null])
+    expect(sectionAt(moved.root, [1])).toEqual(cell('door', { rail: true, insideDrawers: 2, insideDrawersHeight: 600 }))
+    // With another part sharing the space, the doors get a size, so that part doesn't grow.
+    const shared = putBehindDoors(stack([null, cell('open')], [null, cell('door')], [null, cell('drawers')]), [2], [600, 600, 600])!
+    expect(isSplit(shared.root) && shared.root.parts.map((p) => p.size)).toEqual([null, 1200])
+    // Just the two: the doors are all that's left.
+    expect(putBehindDoors(stack([null, cell('door')], [400, cell('drawers')]), [1], [800, 400])).toEqual({
+      root: cell('door', { insideDrawers: 3, insideDrawersHeight: 400 }),
+      path: [],
+    })
+    // Not drawers over doors, beside them, or under doors that have some inside already.
+    expect(putBehindDoors(stack([null, cell('drawers')], [null, cell('door')]), [0], [600, 600])).toBeNull()
+    expect(putBehindDoors(across([null, cell('door')], [null, cell('drawers')]), [1], [600, 600])).toBeNull()
+    expect(putBehindDoors(stack([null, cell('door', { insideDrawers: 1 })], [null, cell('drawers')]), [1], [600, 600])).toBeNull()
+  })
+
+  it('puts drawers inside at the bottom, 200 mm each unless sized, leaving at least 100 mm over them', () => {
+    const r = { x: 0, y: 0, w: 900, h: 2000 }
+    expect(insideSpace(cell('door', { insideDrawers: 2 }), r)).toEqual({ n: 2, drawers: { ...r, y: 1600, h: 400 }, above: { ...r, h: 1600 } })
+    expect(insideSpace(cell('door', { insideDrawers: 2, insideDrawersHeight: 1950 }), r).drawers!.h).toBe(1900)
+    expect(insideSpace(cell('door'), r)).toEqual({ n: 0, drawers: null, above: r })
+    expect(insideSpace(cell('open', { insideDrawers: 2 }), r)).toEqual({ n: 0, drawers: null, above: r })
+  })
+
   it('sets sizes and drags dividers, keeping each part at least 100 mm', () => {
     const front = across([null, cell('door')], [null, cell('drawers')])
     const set = setPartSize(front, [1], 333.4)
@@ -216,6 +262,17 @@ describe('warnings', () => {
     expect(cellUnder(c, placed(c), c.top!.cutouts[0])?.path).toEqual([1])
   })
 
+  it('warns about a sink over drawers inside doors, and drawers inside set too tall', () => {
+    const c = cabinet({
+      walls: { roomId: 'K', edgeIds: ['e0'], start: 0, length: 1000 },
+      legs: [cell('door', { insideDrawers: 1, insideDrawersHeight: 300 })],
+      top: { ...newWorktop(), cutouts: [{ id: 's', kind: 'sink', leg: 0, x: 500, width: 600, depth: 440, mount: 'under' }] },
+    })
+    expect(warn(c).join(' ')).toMatch(/sink is over drawers/)
+    const tall = cabinet({ ...c, top: null, legs: [cell('door', { insideDrawers: 2, insideDrawersHeight: 5000 })] })
+    expect(warn(tall).join(' ')).toMatch(/drawers inside one compartment are set too tall/)
+  })
+
   it('measures a door beside a fixed panel by what the panel leaves it', () => {
     const c = (fixedWidth: number) =>
       cabinet({ walls: { roomId: 'K', edgeIds: ['e0'], start: 0, length: 1000 }, legs: [cell('door', { hinge: 'right', fixed: 'left', fixedWidth })] })
@@ -280,6 +337,22 @@ describe('materials', () => {
     expect(m).toMatchObject({ doors: 1, hinges: 2, handles: 1, shelves: 2 })
     const pair = cabinet({ ...c, legs: [cell('door', { hinge: 'pair', fixed: 'left', fixedWidth: 200 })] })
     expect(cabinetMaterials(pair, placed(pair))).toMatchObject({ doors: 2, hinges: 4, handles: 2 })
+  })
+
+  it('counts drawers inside doors: runners, boxes and a fixed shelf over them, but no fronts or handles', () => {
+    const c = cabinet({
+      walls: { roomId: 'K', edgeIds: ['e0'], start: 0, length: 1000 },
+      legs: [cell('door', { insideDrawers: 2, insideDrawersHeight: 600 })],
+      height: 2000,
+      depth: 600,
+    })
+    const plain = cabinet({ ...c, legs: [cell('door')] })
+    const m = cabinetMaterials(c, placed(c))
+    const p = cabinetMaterials(plain, placed(plain))
+    expect(m).toMatchObject({ drawers: 2, doors: p.doors, hinges: p.hinges, handles: p.handles })
+    expect(m.board.fronts).toBe(p.board.fronts)
+    expect(m.board.dividers).toBe(1000 * 600)
+    expect(m.board.drawerBoxes).toBeGreaterThan(0)
   })
 
   it('rounds sheets up', () => {
