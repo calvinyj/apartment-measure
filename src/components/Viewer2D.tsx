@@ -1,14 +1,16 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
+import { furnitureSpots } from '../furniture'
 import { normDeg } from '../geometry/facing'
 import { roomAnchors } from '../geometry/lights'
 import { snapMeasure, type MeasureSnap } from '../geometry/measure'
 import { scale } from '../geometry/vec'
 import { useStore } from '../store'
-import { LIGHT_KINDS, type Light, type PlugPoint, type Vec2 } from '../types'
+import { LIGHT_KINDS, ORDER_STATUSES, type FurnitureItem, type Light, type PlugPoint, type Vec2 } from '../types'
 import { CabinetIcon, CabinetLayer, PLAN_LEVEL_LABEL, placeCabinets, type PlacedCabinet, type PlanLevel } from './CabinetLayer'
-import { PlanImageToggle, useRememberedCheck, useSolved } from './common'
+import { PlanImageToggle, useRememberedCheck, useSolved, useWidth } from './common'
 import { CompassBadge } from './Compass'
 import { FloorPlan, roomLabelBoxes, useFloorPlan } from './FloorPlan'
+import { cardAside, cardWidth, furnitureBoxes, FurnitureLayer, GroupIcon, planPoints, StatusIcon } from './Furniture'
 import { LightIcon, lightBoxes, LightLayer } from './Lights'
 import { MeasureChip, MeasureMarks, measureTargets } from './MeasureTool'
 import { PlanView, type PointerInfo } from './PlanView'
@@ -24,12 +26,20 @@ export function Viewer2D() {
   const [specs, setSpecs] = useRememberedCheck('2d:specs', true)
   const [plugs, setPlugs] = useRememberedCheck('2d:plugs', true)
   const [cabinets, setCabinets] = useRememberedCheck('2d:cabinets', true)
+  const [furniture, setFurniture] = useRememberedCheck('2d:furniture', true)
   const [rotation, setRotation] = useState(0)
   const [resetKey, setResetKey] = useState(0)
   const plan = useFloorPlan(solved)
   const anchors = useMemo(() => roomAnchors(solved), [solved])
   const outlines = useMemo(() => new Map(solved.rooms.map((r) => [r.room.id, r.outline])), [solved])
   const placedCabinets = useMemo(() => placeCabinets(project.cabinets, solved), [project.cabinets, solved])
+  const spots = useMemo(
+    () => (furniture ? furnitureSpots(anchors, project.furniture) : []),
+    [furniture, anchors, project.furniture],
+  )
+  const points = useMemo(() => (plan ? planPoints(plan, solved) : []), [plan, solved])
+  const [canvasRef, canvasWidth] = useWidth()
+  const cardW = cardWidth(canvasWidth || 1000)
   const mmPerPx = solved.mmPerPx
 
   // Measuring: tap two points for the length between them. The view is in plan image px, so taps are
@@ -106,6 +116,11 @@ export function Viewer2D() {
             <input type="checkbox" checked={cabinets} onChange={(e) => setCabinets(e.target.checked)} /> Cabinets
           </label>
         )}
+        {project.furniture.length > 0 && (
+          <label className="check small">
+            <input type="checkbox" checked={furniture} onChange={(e) => setFurniture(e.target.checked)} /> Furniture
+          </label>
+        )}
         <PlanImageToggle />
         <button
           className={`btn small${measuring ? ' primary' : ''}`}
@@ -147,12 +162,13 @@ export function Viewer2D() {
         </button>
         {north != null && <CompassBadge north={north} turn={rotation} />}
       </div>
-      <div className="band-canvas">
+      <div className="band-canvas" ref={canvasRef}>
         <PlanView
           image={project.image}
           showImage={project.settings.showPlanImage}
           fit={plan.fit}
           fitKey={String(resetKey)}
+          fitAside={spots.length ? cardAside(cardW) : 0}
           rotation={rotation}
           onRotate={setRotation}
           cursor={measuring ? 'crosshair' : undefined}
@@ -160,7 +176,13 @@ export function Viewer2D() {
           onHover={measuring ? onMeasureHover : undefined}
           overlay={
             <>
-              <Legend lights={lights ? project.lights : []} plugs={plugs ? project.plugs : []} cabinets={cabinets ? placedCabinets : []} />
+              <Legend
+                lights={lights ? project.lights : []}
+                plugs={plugs ? project.plugs : []}
+                cabinets={cabinets ? placedCabinets : []}
+                furniture={spots.flatMap((s) => s.items)}
+                shared={spots.some((s) => s.items.length > 1)}
+              />
               {measuring && <MeasureChip ends={ends} hover={hover} unit={project.settings.inputUnit} onClear={() => setEnds([])} />}
             </>
           }
@@ -169,10 +191,12 @@ export function Viewer2D() {
             const ke = k / mmPerPx
             keRef.current = ke
             const roomLabels = labels ? roomLabelBoxes(plan, ke) : []
+            const marks = furnitureBoxes(spots, ke)
             const placed = plugs
               ? placePlugs(project.plugs, solved, anchors, ke, rot, [
                   ...roomLabels,
                   ...(lights ? lightBoxes(project.lights, anchors, ke, rot) : []),
+                  ...marks,
                 ])
               : []
             return (
@@ -186,7 +210,7 @@ export function Viewer2D() {
                   labels={labels}
                   dims={dims}
                   unit={project.settings.inputUnit}
-                  avoid={plugBoxes(placed)}
+                  avoid={[...plugBoxes(placed), ...marks]}
                   onFloor={cabinets && <CabinetLayer placed={placedCabinets} />}
                 />
                 {lights && (
@@ -196,11 +220,12 @@ export function Viewer2D() {
                     ke={ke}
                     rot={rot}
                     specs={specs}
-                    avoid={[...roomLabels, ...plugBoxes(placed)]}
+                    avoid={[...roomLabels, ...plugBoxes(placed), ...marks]}
                     outlines={outlines}
                   />
                 )}
                 <PlugLayer placed={placed} ke={ke} rot={rot} />
+                <FurnitureLayer spots={spots} points={points} ke={ke} rot={rot} unit={project.settings.inputUnit} cardW={cardW} />
                 {measuring && <MeasureMarks ends={ends} hover={hover} ke={ke} rot={rot} unit={project.settings.inputUnit} />}
               </g>
             )
@@ -215,13 +240,27 @@ export function Viewer2D() {
  * What the symbols on the plan are: each kind of light and fan, plug points and cabinets, that's shown. It
  * starts folded on a narrow screen, where it would cover much of the plan; open, the plan fits beside it.
  */
-function Legend({ lights, plugs, cabinets }: { lights: Light[]; plugs: PlugPoint[]; cabinets: PlacedCabinet[] }) {
+function Legend({
+  lights,
+  plugs,
+  cabinets,
+  furniture,
+  shared,
+}: {
+  lights: Light[]
+  plugs: PlugPoint[]
+  cabinets: PlacedCabinet[]
+  furniture: FurnitureItem[]
+  /** some spot has several items */
+  shared: boolean
+}) {
   const [open, setOpen] = useState(() => window.matchMedia('(min-width: 700px)').matches)
   const kinds = LIGHT_KINDS.filter((k) => lights.some((l) => l.kind === k.value))
   const existing = plugs.some((p) => p.existing)
   const added = plugs.some((p) => !p.existing)
   const levels = (['below', 'cut', 'above'] as PlanLevel[]).filter((l) => cabinets.some((x) => x.level === l))
-  if (!kinds.length && !plugs.length && !levels.length) return null
+  const statuses = ORDER_STATUSES.filter((s) => furniture.some((f) => f.status === s.value))
+  if (!kinds.length && !plugs.length && !levels.length && !furniture.length) return null
   const toggle = (
     <button className="legend-toggle" aria-expanded={open} onClick={() => setOpen(!open)}>
       Legend <span aria-hidden>{open ? '▾' : '▸'}</span>
@@ -256,8 +295,20 @@ function Legend({ lights, plugs, cabinets }: { lights: Light[]; plugs: PlugPoint
             {PLAN_LEVEL_LABEL[l]}
           </li>
         ))}
+        {statuses.map((s) => (
+          <li key={s.value}>
+            <StatusIcon status={s.value} />
+            Furniture, {s.label.toLowerCase()}
+          </li>
+        ))}
+        {shared && (
+          <li>
+            <GroupIcon />
+            Furniture sharing a spot (how many)
+          </li>
+        )}
       </ul>
-      {plugs.length > 0 && <p className="muted">The number is how many sockets.</p>}
+      {plugs.length > 0 && <p className="muted">A plug point’s number is how many sockets.</p>}
     </div>
   )
 }

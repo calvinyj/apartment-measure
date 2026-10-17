@@ -59,6 +59,7 @@ describe('a straight wall facing different neighbours along its length', () => {
     lights: [],
     plugs: [],
     cabinets: [],
+    furniture: [],
     name: 't',
     image: null,
     calibration: { a: { x: 0, y: 0 }, b: { x: 100, y: 0 }, mm: 1000 },

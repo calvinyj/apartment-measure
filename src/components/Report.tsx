@@ -1,13 +1,15 @@
 import { useState } from 'react'
 import { acZones, hpLabel, type AcZone } from '../ac'
+import { formatPrice, furnitureList, itemHref, linkSite, sizeLabel, statusTotals } from '../furniture'
 import { formatFacing, roomFacing } from '../geometry/facing'
 import { FAN_SIZES, fixtureList, formatWatts, TUBE_SIZES, type FixtureRow } from '../geometry/lights'
 import { bySize, plugSchedule, type PlugTally } from '../geometry/plugs'
 import { downloadFile, useStore } from '../store'
-import { lightKindInfo, roomTypeInfo, type LengthUnit, type PlugPoint } from '../types'
+import { lightKindInfo, ORDER_STATUSES, roomTypeInfo, type LengthUnit, type PlugPoint } from '../types'
 import { formatArea, formatLength, formatSqft, fmtInt, M2_TO_SQFT, m2 } from '../units'
 import { cabinetCsv, CabinetsReport } from './CabinetReport'
 import { useSolved } from './common'
+import { StatusIcon, StatusSummary } from './Furniture'
 import { LightIcon } from './Lights'
 import { PlugBadge } from './Plugs'
 
@@ -103,6 +105,8 @@ export function Report() {
   const plugsToAdd = plugRows.reduce((t, r) => addTally(t, r.toAdd), none)
   // The points to add by how many sockets each has, for the electrician's quote.
   const toAddBySize = bySize(plugRows.flatMap((r) => r.toAddPlugs.map((p) => p.count)))
+  const furniture = furnitureList(project.rooms, project.furniture)
+  const statusOf = (v: string) => ORDER_STATUSES.find((s) => s.value === v)!.label
 
   const exportCsv = () => {
     const rows = [
@@ -167,6 +171,23 @@ export function Report() {
           ]
         : []),
       ...cabinetCsv(project, solved),
+      ...(furniture.length
+        ? [
+            [],
+            ['Furniture or appliance', 'Model', 'Room', 'Width (mm)', 'Depth (mm)', 'Height (mm)', 'Price (RM)', 'Status', 'Link'],
+            ...furniture.map(({ item: f, room }) => [
+              f.name.trim(),
+              f.model.trim(),
+              room.name,
+              f.width ?? '',
+              f.depth ?? '',
+              f.height ?? '',
+              f.price ?? '',
+              statusOf(f.status),
+              f.url.trim(),
+            ]),
+          ]
+        : []),
     ]
     const csv = rows.map((r) => r.map((c) => `"${String(c).replace(/"/g, '""')}"`).join(',')).join('\n')
     downloadFile(`${project.name || 'apartment'}-areas.csv`, csv, 'text/csv')
@@ -541,6 +562,74 @@ export function Report() {
           </p>
         ) : (
           <CabinetsReport solved={solved} />
+        )}
+      </section>
+
+      <section className="card">
+        <h3>Furniture &amp; appliances</h3>
+        {furniture.length === 0 ? (
+          <p className="muted">
+            No furniture or appliances yet. Plan them on the{' '}
+            <button className="link" onClick={() => setTab('furniture')}>
+              Furniture
+            </button>{' '}
+            tab.
+          </p>
+        ) : (
+          <>
+            <div className="table-wrap">
+              <table className="table">
+                <thead>
+                  <tr>
+                    <th>Item</th>
+                    <th>Model</th>
+                    <th>Size</th>
+                    <th>Room</th>
+                    <th className="num">Price</th>
+                    <th>Status</th>
+                    <th>Link</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {furniture.map(({ item: f, room }) => {
+                    const href = itemHref(f.url)
+                    return (
+                      <tr key={f.id}>
+                        <td>{f.name.trim() || <span className="muted">Unnamed</span>}</td>
+                        <td>{f.model.trim() || <span className="muted">–</span>}</td>
+                        <td className="nowrap">{sizeLabel(f, unit) || <span className="muted">–</span>}</td>
+                        <td>{room.name}</td>
+                        <td className="num nowrap">{f.price != null ? formatPrice(f.price) : <span className="muted">–</span>}</td>
+                        <td>
+                          <span className="fixture nowrap">
+                            <StatusIcon status={f.status} />
+                            {statusOf(f.status)}
+                          </span>
+                        </td>
+                        <td>
+                          {href ? (
+                            <a href={href} target="_blank" rel="noopener noreferrer" className="nowrap">
+                              {linkSite(f.url)} ↗
+                            </a>
+                          ) : (
+                            <span className="muted">{f.url.trim() || '–'}</span>
+                          )}
+                        </td>
+                      </tr>
+                    )
+                  })}
+                </tbody>
+              </table>
+            </div>
+            <StatusSummary totals={statusTotals(furniture.map((x) => x.item))} />
+            <p className="muted small">
+              Prices are for reference, as you entered them. Plan furniture and appliances on the{' '}
+              <button className="link" onClick={() => setTab('furniture')}>
+                Furniture
+              </button>{' '}
+              tab.
+            </p>
+          </>
         )}
       </section>
     </div>

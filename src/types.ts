@@ -295,6 +295,37 @@ export interface Cabinet {
   top: Worktop | null
 }
 
+/** Where a piece of furniture or an appliance is in getting it: still to order, ordered, or delivered. */
+export type OrderStatus = 'pending' | 'ordered' | 'delivered'
+
+export const ORDER_STATUSES: { value: OrderStatus; label: string }[] = [
+  { value: 'pending', label: 'Pending' },
+  { value: 'ordered', label: 'Ordered' },
+  { value: 'delivered', label: 'Delivered' },
+]
+
+/** A piece of loose furniture or an appliance (not built in), at a spot on the plan. */
+export interface FurnitureItem {
+  id: string
+  /** the room it goes in; it keeps its place in the room as measurements change the room's size */
+  roomId: string
+  /** where it goes, in mm from the centre of the room's measured outline */
+  x: number
+  y: number
+  name: string
+  /** brand and model; '' = not set */
+  model: string
+  /** where to see or buy it; '' = not set */
+  url: string
+  /** its size, mm: across, front to back and high; null = not set */
+  width: number | null
+  depth: number | null
+  height: number | null
+  /** a reference price, RM; null = not set */
+  price: number | null
+  status: OrderStatus
+}
+
 export interface Calibration {
   a: Vec2
   b: Vec2
@@ -363,4 +394,5 @@ export interface Project {
   lights: Light[]
   plugs: PlugPoint[]
   cabinets: Cabinet[]
+  furniture: FurnitureItem[]
 }

@@ -11,6 +11,19 @@ export function useSolved() {
   return useMemo(() => solveProject(project), [project.rooms, project.calibration, project.settings, project.north])
 }
 
+/** A ref for an element, and its width in px, kept up to date as it's resized; 0 until it's laid out. */
+export function useWidth(): [(el: HTMLElement | null) => void, number] {
+  const [el, setEl] = useState<HTMLElement | null>(null)
+  const [width, setWidth] = useState(0)
+  useEffect(() => {
+    if (!el) return
+    const ro = new ResizeObserver(() => setWidth(el.getBoundingClientRect().width))
+    ro.observe(el)
+    return () => ro.disconnect()
+  }, [el])
+  return [setEl, width]
+}
+
 /**
  * A view's checkbox, remembered on this device (in localStorage) when you leave the tab or reload,
  * and the same for every layout. It isn't part of the layout, so ticking it isn't an edit to save.

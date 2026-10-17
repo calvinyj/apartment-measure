@@ -8,10 +8,15 @@ export function toUnit(mm: number, unit: LengthUnit): number {
   return mm / FACTOR[unit]
 }
 
-export function formatLength(mm: number, unit: LengthUnit = 'mm'): string {
+/** A length as a number in the unit, without the unit, e.g. "3,150" or "3.150". */
+export function formatLengthValue(mm: number, unit: LengthUnit = 'mm'): string {
   const v = toUnit(mm, unit)
   const digits = unit === 'mm' ? 0 : unit === 'cm' ? 1 : 3
-  return `${v.toLocaleString(undefined, { maximumFractionDigits: digits, minimumFractionDigits: unit === 'm' ? digits : 0 })} ${unit}`
+  return v.toLocaleString(undefined, { maximumFractionDigits: digits, minimumFractionDigits: unit === 'm' ? digits : 0 })
+}
+
+export function formatLength(mm: number, unit: LengthUnit = 'mm'): string {
+  return `${formatLengthValue(mm, unit)} ${unit}`
 }
 
 /** Accepts "3152", "315.2cm", "3.152 m"; bare numbers use the default unit. */
