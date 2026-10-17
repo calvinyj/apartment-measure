@@ -45,6 +45,7 @@ export function FurniturePlanner() {
   const [labels, setLabels] = useState(true)
   const [dims, setDims] = useState(false)
   const [cabinets, setCabinets] = useRememberedCheck('furniture:cabinets', true)
+  const [namesOnly, setNamesOnly] = useRememberedCheck('furniture:names-only', false)
   const [error, setError] = useState<string | null>(null)
   const [canvasRef, canvasWidth] = useWidth()
   const keRef = useRef(1)
@@ -193,6 +194,9 @@ export function FurniturePlanner() {
               + New item
             </button>
           </div>
+          <label className="check small" title="Cards show each item’s name and nothing else">
+            <input type="checkbox" checked={namesOnly} onChange={(e) => setNamesOnly(e.target.checked)} /> Names only
+          </label>
           <label className="check small">
             <input type="checkbox" checked={labels} onChange={(e) => setLabels(e.target.checked)} /> Labels
           </label>
@@ -241,6 +245,7 @@ export function FurniturePlanner() {
                     ke={ke}
                     unit={project.settings.inputUnit}
                     cardW={cardW}
+                    namesOnly={namesOnly}
                     selectedId={selectedId}
                     interactive
                   />
