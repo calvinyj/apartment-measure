@@ -84,10 +84,14 @@ interface Card {
   h: number
 }
 
-/** A card's lines, cut short to fit `w` px. The price goes on the right of the name where that leaves room for it. */
-function cardFor(f: FurnitureItem, unit: LengthUnit, w: number): Card {
+/**
+ * A card's lines, cut short to fit `w` px. The price goes on the right of the name where that leaves room for
+ * it. With `namesOnly`, just the name.
+ */
+function cardFor(f: FurnitureItem, unit: LengthUnit, w: number, namesOnly: boolean): Card {
   const max = w - TEXT_X - PAD_X
   const name = f.name.trim()
+  if (namesOnly) return { name: fitText(name || 'Unnamed', NAME_PX, 600, max), unnamed: !name, price: '', details: [], h: PAD_Y * 2 + NAME_LINE }
   const price = f.price != null ? formatPrice(f.price) : ''
   const beside = price ? max - textWidth(price, DETAIL_PX, 600) - 6 : max
   const inline = beside >= 40
@@ -183,6 +187,7 @@ export function FurnitureLayer({
   rot = 0,
   unit,
   cardW,
+  namesOnly = false,
   selectedId,
   interactive = false,
 }: {
@@ -194,12 +199,14 @@ export function FurnitureLayer({
   unit: LengthUnit
   /** px */
   cardW: number
+  /** cards with each item's name and nothing else, for when there are a lot */
+  namesOnly?: boolean
   selectedId?: string | null
   interactive?: boolean
 }) {
   const cards = useMemo(
-    () => new Map(spots.flatMap((s) => s.items).map((f) => [f.id, cardFor(f, unit, cardW)])),
-    [spots, unit, cardW],
+    () => new Map(spots.flatMap((s) => s.items).map((f) => [f.id, cardFor(f, unit, cardW, namesOnly)])),
+    [spots, unit, cardW, namesOnly],
   )
   if (!spots.length) return null
   const px = 1 / ke
