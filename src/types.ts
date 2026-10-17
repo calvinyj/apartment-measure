@@ -188,6 +188,10 @@ export interface CabinetCell {
   fixedWidth?: number | null
   /** drawers, stacked evenly (drawer fronts) */
   drawers: number
+  /** drawers inside, behind the doors, at the bottom (door fronts); unset = none */
+  insideDrawers?: number
+  /** how high those drawers are together, mm; unset = DRAWER_INSIDE_H each */
+  insideDrawersHeight?: number | null
   /** adjustable shelves inside (doors or open) */
   shelves: number
   /** a hanging rail inside (doors or open) */

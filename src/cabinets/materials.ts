@@ -2,7 +2,7 @@ import { area } from '../geometry/polygon'
 import { dist } from '../geometry/vec'
 import type { ApplianceKind, Cabinet, CabinetCell, CutoutKind } from '../types'
 import { carcassLength, outline, type Placement } from './placement'
-import { doorSpace, layOut } from './sections'
+import { doorSpace, insideSpace, layOut } from './sections'
 
 /** A sheet of board, 8 × 4 ft, mm². */
 export const SHEET = 2440 * 1220
@@ -69,6 +69,14 @@ export const hingesFor = (h: number) => (h <= 900 ? 2 : h <= 1600 ? 3 : h <= 200
 const SHELF_SETBACK = 20
 const DRAWER_BACK = 50
 
+/** Board for n drawers stacked in a space w by h: each box's two sides, a front and back, and a bottom. */
+function drawerBoxes(c: Cabinet, n: number, w: number, h: number) {
+  const bh = Math.max(60, Math.min(250, h / n - 60))
+  const bd = c.depth - DRAWER_BACK
+  const bw = Math.max(0, w - 2 * c.board - 26)
+  return n * (2 * bd * bh + 2 * bw * bh + bw * bd)
+}
+
 /** Leaves of doors this wide (beside any fixed panel): a pair, sliding doors and lift-ups are two (one lift-up if narrow). */
 export const doorLeaves = (c: CabinetCell, w: number) => (c.hinge === 'pair' || c.hinge === 'sliding' ? 2 : c.hinge === 'lift' && w > 1200 ? 2 : 1)
 
@@ -124,15 +132,16 @@ export function cabinetMaterials(c: Cabinet, p: Placement): CabinetMaterials {
         if (handled) m.handles += leaves
       }
       if (cell.front === 'drawers') {
-        const n = cell.drawers
-        const fh = h / n
-        // Each drawer's box: two sides, a front and back inside the drawer front, and a bottom.
-        const bh = Math.max(60, Math.min(250, fh - 60))
-        const bd = D - DRAWER_BACK
-        const bw = Math.max(0, w - 2 * c.board - 26)
-        b.drawerBoxes += n * (2 * bd * bh + 2 * bw * bh + bw * bd)
-        m.drawers += n
-        if (handled) m.handles += n
+        b.drawerBoxes += drawerBoxes(c, cell.drawers, w, h)
+        m.drawers += cell.drawers
+        if (handled) m.handles += cell.drawers
+      }
+      const inside = insideSpace(cell, rect)
+      if (inside.drawers) {
+        // Behind the doors: a fixed shelf over them, and boxes whose fronts are inside board, with no handles.
+        b.dividers += w * D
+        b.drawerBoxes += drawerBoxes(c, inside.n, w, inside.drawers.h)
+        m.drawers += inside.n
       }
       if (cell.front === 'appliance') m.appliances[cell.appliance] = (m.appliances[cell.appliance] ?? 0) + 1
     }

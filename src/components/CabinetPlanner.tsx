@@ -6,9 +6,11 @@ import { legPoint, outline, placeCabinet, shapeLabel, type Placement } from '../
 import {
   doorSpace,
   hasFixed,
+  insideSpace,
   isSplit,
   layOut,
   movePart,
+  putBehindDoors,
   removeAt,
   samePath,
   sectionAt,
@@ -739,6 +741,9 @@ function FrontsStep({
   const size = split ? split.parts[i].size : null
   const shown = split?.split === 'across' ? me.rect.w : me.rect.h
   const space = doorSpace(cell, me.rect)
+  const behind = insideSpace(cell, me.rect)
+  const intoDoors =
+    cell.front === 'drawers' && laid ? putBehindDoors(front, path, laid.splits.find((x) => samePath(x.path, parentPath))?.sizes ?? []) : null
   const patch = (x: Partial<typeof cell>) => setLeg(sel.leg, updateCell(front, path, x))
   const divide = (dir: 'across' | 'stack', n: number) => {
     setLeg(sel.leg, splitAt(front, path, dir, n))
@@ -840,6 +845,22 @@ function FrontsStep({
           </select>
         </Field>
       )}
+      {intoDoors && (
+        <div className="stack tight">
+          <div className="row">
+            <button
+              className="btn small"
+              onClick={() => {
+                setLeg(sel.leg, intoDoors.root)
+                setSel({ leg: sel.leg, path: intoDoors.path })
+              }}
+            >
+              Put them behind the doors above
+            </button>
+          </div>
+          <span className="field-hint">The doors run down over them, so from outside it’s just doors, and the drawers go inside at the bottom.</span>
+        </div>
+      )}
       {(cell.front === 'door' || cell.front === 'open') && (
         <div className="grid2">
           <Field label="Shelves">
@@ -854,6 +875,29 @@ function FrontsStep({
           <label className="check">
             <input type="checkbox" checked={cell.rail} onChange={(e) => patch({ rail: e.target.checked })} /> Hanging rail
           </label>
+        </div>
+      )}
+      {cell.front === 'door' && (
+        <div className="grid2">
+          <Field label="Drawers inside" hint="Behind the doors, at the bottom.">
+            <select value={cell.insideDrawers ?? 0} onChange={(e) => patch({ insideDrawers: Number(e.target.value) || undefined })}>
+              {[0, 1, 2, 3, 4, 5, 6].map((n) => (
+                <option key={n} value={n}>
+                  {n || 'None'}
+                </option>
+              ))}
+            </select>
+          </Field>
+          {behind.drawers && (
+            <Field label="Their height" hint={`All of them. ${mm(behind.drawers.h / behind.n)} each.`}>
+              <LengthInput
+                value={cell.insideDrawersHeight ?? null}
+                placeholder={behind.drawers.h}
+                unit={unit}
+                onChange={(v) => patch({ insideDrawersHeight: v })}
+              />
+            </Field>
+          )}
         </div>
       )}
       {cell.front === 'appliance' && (
