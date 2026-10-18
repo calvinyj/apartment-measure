@@ -2,6 +2,7 @@
   "name": "apartment-measure",
   "private": true,
   "version": "0.1.0",
+  "license": "MIT",
   "type": "module",
   "scripts": {
     "dev": "concurrently -k -n api,web -c blue,green \"node --watch server/index.ts\" \"vite\"",

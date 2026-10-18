@@ -4,6 +4,9 @@ Check an apartment's real floor area against the advertised figure, and size the
 
 ## Run it
 
+1. Install [Node.js](https://nodejs.org/en/download) 22.18 or newer (npm comes with it). The server runs its TypeScript directly and uses Node's built-in SQLite, which older versions don't have.
+2. Then, in the project folder:
+
 ```sh
 npm install
 npm run dev        # API on :8787 + web app on http://localhost:5173
@@ -106,3 +109,7 @@ Set `ACCESS_KEY` whenever the server can be reached from the internet.
 - Only one user; there are no accounts.
 - On a phone held upright, the furniture cards beside the plan leave it narrow; zoom in, turn the phone, or untick **Furniture** on the 2D tab. Cards above and below the plan would suit a tall, narrow screen better.
 - Cabinets aren't drawn on the 3D tab yet, and a finish is a colour only (no pattern image yet). Sliding doors are planned compartment by compartment, though in a real wardrobe they often span several.
+
+## License
+
+[MIT](LICENSE)
