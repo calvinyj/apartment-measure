@@ -2,9 +2,9 @@ import { useLayoutEffect, useRef, useState, type PointerEvent as ReactPointerEve
 import { cabinetTop } from '../cabinets/checks'
 import { doorLeaves } from '../cabinets/materials'
 import { legPoint, outline, type Placement } from '../cabinets/placement'
-import { doorSpace, insideSpace, layOut, moveDivider, samePath, type LaidCell, type LaidDivider, type Rect } from '../cabinets/sections'
+import { doorSpace, insideSpace, layOut, moveDivider, samePath, shelvesIn, type LaidCell, type LaidDivider, type Rect } from '../cabinets/sections'
 import { bbox } from '../geometry/polygon'
-import type { ApplianceKind, Cabinet, CabinetSection, Cutout, Vec2 } from '../types'
+import type { ApplianceKind, Cabinet, CabinetCell, CabinetSection, Cutout, Vec2 } from '../types'
 import { parseHexColor } from './common'
 
 const INK = '#3f4652'
@@ -96,12 +96,11 @@ const line = (x1: number, y1: number, x2: number, y2: number, props: Record<stri
   <line x1={x1} y1={y1} x2={x2} y2={y2} vectorEffect="non-scaling-stroke" {...props} />
 )
 
-/** Shelves, and a hanging rail under the top shelf (or near the top), inside a compartment. */
-function Inside({ r, shelves, rail, k, ink }: { r: Rect; shelves: number; rail: boolean; k: number; ink: Ink }) {
-  const ys = rail
-    ? Array.from({ length: shelves }, (_, i) => r.y + Math.min(300 * (i + 1), (r.h * (i + 1)) / (shelves + 2)))
-    : Array.from({ length: shelves }, (_, i) => r.y + (r.h * (i + 1)) / (shelves + 1))
-  const railY = rail ? (ys.length ? ys[ys.length - 1] : r.y) + 70 : null
+/** Shelves, and a hanging rail, inside a compartment. */
+function Inside({ r, cell, k, ink }: { r: Rect; cell: CabinetCell; k: number; ink: Ink }) {
+  const { shelves: ys, rail: railY } = shelvesIn(cell, r)
+  // Clothes hang down to the shelf under the rail, if there is one.
+  const drop = railY == null ? 0 : Math.min(600, r.h * 0.45, (ys.find((y) => y > railY) ?? r.y + r.h) - railY - 40)
   return (
     <g pointerEvents="none">
       {ys.map((y, i) => (
@@ -111,12 +110,13 @@ function Inside({ r, shelves, rail, k, ink }: { r: Rect; shelves: number; rail: 
         <>
           {line(r.x + 20, railY, r.x + r.w - 20, railY, { stroke: ink.faint, strokeWidth: 2.5, strokeLinecap: 'round' })}
           {r.h > 600 &&
+            drop > 100 &&
             Array.from({ length: Math.max(1, Math.floor((r.w - 80) / 120)) }, (_, i) => {
               const x = r.x + 60 + i * 120
               return (
                 <path
                   key={i}
-                  d={`M${x} ${railY} l-40 ${Math.min(600, r.h * 0.45)} h80 z`}
+                  d={`M${x} ${railY} l-40 ${drop} h80 z`}
                   fill="none"
                   stroke="#9ca3af"
                   strokeWidth={0.7}
@@ -270,7 +270,7 @@ function CellFront({ c, laid, k, inside }: { c: Cabinet; laid: LaidCell; k: numb
       <>
         <rect x={r.x} y={r.y} width={r.w} height={r.h} fill={c.carcass.color} stroke={inner.line} strokeWidth={1} vectorEffect="non-scaling-stroke" />
         <rect x={r.x} y={r.y} width={r.w} height={r.h} fill="#000" fillOpacity={0.07} pointerEvents="none" />
-        <Inside r={r} shelves={cell.shelves} rail={cell.rail} k={k} ink={inner} />
+        <Inside r={r} cell={cell} k={k} ink={inner} />
       </>
     )
 
@@ -288,7 +288,7 @@ function CellFront({ c, laid, k, inside }: { c: Cabinet; laid: LaidCell; k: numb
         <>
           <rect x={r.x} y={r.y} width={r.w} height={r.h} fill={c.carcass.color} />
           <rect x={r.x} y={r.y} width={r.w} height={r.h} fill="#000" fillOpacity={0.07} />
-          <Inside r={inset(behind.above)} shelves={cell.shelves} rail={cell.rail} k={k} ink={inner} />
+          <Inside r={inset(behind.above)} cell={cell} k={k} ink={inner} />
           {behind.drawers && <InsideDrawers r={inset(behind.drawers)} n={behind.n} fill={c.carcass.color} ink={inner} />}
         </>
       )}

@@ -194,6 +194,10 @@ export interface CabinetCell {
   insideDrawersHeight?: number | null
   /** adjustable shelves inside (doors or open) */
   shelves: number
+  /** shelves a set distance apart from the top or the bottom, rather than spread evenly; unset = evenly */
+  shelfAlign?: 'top' | 'bottom'
+  /** that distance, mm: to the first shelf and from each to the next; unset = SHELF_GAP */
+  shelfGap?: number | null
   /** a hanging rail inside (doors or open) */
   rail: boolean
   /** what fills the gap (appliance) */

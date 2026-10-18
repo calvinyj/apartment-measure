@@ -15,6 +15,8 @@ import {
   samePath,
   sectionAt,
   setPartSize,
+  SHELF_GAP,
+  shelfSpacing,
   splitAt,
   updateCell,
 } from '../cabinets/sections'
@@ -83,6 +85,12 @@ const FIXED: { value: 'none' | 'left' | 'right'; label: string }[] = [
   { value: 'none', label: 'None' },
   { value: 'left', label: 'Left' },
   { value: 'right', label: 'Right' },
+]
+
+const SHELF_ALIGN: { value: 'even' | 'top' | 'bottom'; label: string }[] = [
+  { value: 'even', label: 'Evenly' },
+  { value: 'top', label: 'From the top' },
+  { value: 'bottom', label: 'From the bottom' },
 ]
 
 const MOUNTS: { value: CabinetMount; label: string }[] = [
@@ -742,6 +750,8 @@ function FrontsStep({
   const shown = split?.split === 'across' ? me.rect.w : me.rect.h
   const space = doorSpace(cell, me.rect)
   const behind = insideSpace(cell, me.rect)
+  const shelving = cell.front === 'door' || cell.front === 'open'
+  const spacing = shelving ? shelfSpacing(cell, behind.above.h) : null
   const intoDoors =
     cell.front === 'drawers' && laid ? putBehindDoors(front, path, laid.splits.find((x) => samePath(x.path, parentPath))?.sizes ?? []) : null
   const patch = (x: Partial<typeof cell>) => setLeg(sel.leg, updateCell(front, path, x))
@@ -861,7 +871,7 @@ function FrontsStep({
           <span className="field-hint">The doors run down over them, so from outside it’s just doors, and the drawers go inside at the bottom.</span>
         </div>
       )}
-      {(cell.front === 'door' || cell.front === 'open') && (
+      {shelving && (
         <div className="grid2">
           <Field label="Shelves">
             <select value={cell.shelves} onChange={(e) => patch({ shelves: Number(e.target.value) })}>
@@ -876,6 +886,27 @@ function FrontsStep({
             <input type="checkbox" checked={cell.rail} onChange={(e) => patch({ rail: e.target.checked })} /> Hanging rail
           </label>
         </div>
+      )}
+      {shelving && cell.shelves > 0 && (
+        <Field label="Shelves spaced">
+          <Segmented
+            value={cell.shelfAlign ?? 'even'}
+            options={SHELF_ALIGN}
+            onChange={(a) => patch({ shelfAlign: a === 'even' ? undefined : a })}
+          />
+        </Field>
+      )}
+      {spacing && (
+        <Field
+          label="Space between them"
+          hint={`From ${cell.shelfAlign === 'top' ? 'the top' : behind.drawers ? 'the drawers inside' : 'the bottom'} to the first shelf, and from each to the next. ${
+            spacing.fits
+              ? `Leaves ${mm(behind.above.h - cell.shelves * spacing.gap)} ${cell.shelfAlign === 'top' ? 'under the last' : 'over the top one'}.`
+              : `${mm(cell.shelfGap ?? SHELF_GAP)} apart doesn’t fit ${cell.shelves}, so they’re ${mm(spacing.gap)} apart.`
+          }`}
+        >
+          <LengthInput value={cell.shelfGap ?? null} placeholder={spacing.gap} unit={unit} onChange={(v) => patch({ shelfGap: v })} />
+        </Field>
       )}
       {cell.front === 'door' && (
         <div className="grid2">

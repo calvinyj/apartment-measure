@@ -20,6 +20,8 @@ import {
   removeAt,
   sectionAt,
   setPartSize,
+  shelfSpacing,
+  shelvesIn,
   splitAt,
   stack,
 } from './sections'
@@ -188,6 +190,31 @@ describe('compartments', () => {
     expect(insideSpace(cell('open', { insideDrawers: 2 }), r)).toEqual({ n: 0, drawers: null, above: r })
   })
 
+  it('spreads shelves evenly, or a set distance apart from the top or the bottom', () => {
+    const r = { x: 0, y: 100, w: 900, h: 2000 }
+    expect(shelvesIn(cell('open', { shelves: 3 }), r)).toEqual({ shelves: [600, 1100, 1600], rail: null })
+    // 300 mm apart unless set
+    expect(shelvesIn(cell('open', { shelves: 3, shelfAlign: 'top' }), r).shelves).toEqual([400, 700, 1000])
+    expect(shelvesIn(cell('open', { shelves: 3, shelfAlign: 'top', shelfGap: 350 }), r).shelves).toEqual([450, 800, 1150])
+    expect(shelvesIn(cell('open', { shelves: 3, shelfAlign: 'bottom', shelfGap: 350 }), r).shelves).toEqual([1050, 1400, 1750])
+    expect(shelfSpacing(cell('open', { shelves: 3 }), 2000)).toBeNull()
+  })
+
+  it('draws shelves set too far apart closer, leaving 100 mm past the last', () => {
+    const c = cell('door', { shelves: 4, shelfAlign: 'top', shelfGap: 600 })
+    expect(shelfSpacing(c, 2000)).toEqual({ gap: 475, fits: false })
+    expect(shelfSpacing(c, 2500)).toEqual({ gap: 600, fits: true })
+    expect(shelvesIn(c, { x: 0, y: 0, w: 900, h: 2000 }).shelves).toEqual([475, 950, 1425, 1900])
+  })
+
+  it('hangs the rail under the lowest shelf, or near the top when the shelves go from the bottom', () => {
+    const r = { x: 0, y: 0, w: 900, h: 2000 }
+    expect(shelvesIn(cell('door', { shelves: 1, rail: true }), r)).toEqual({ shelves: [300], rail: 370 })
+    expect(shelvesIn(cell('door', { shelves: 0, rail: true }), r)).toEqual({ shelves: [], rail: 70 })
+    expect(shelvesIn(cell('door', { shelves: 2, rail: true, shelfAlign: 'top', shelfGap: 250 }), r)).toEqual({ shelves: [250, 500], rail: 570 })
+    expect(shelvesIn(cell('door', { shelves: 2, rail: true, shelfAlign: 'bottom', shelfGap: 250 }), r)).toEqual({ shelves: [1500, 1750], rail: 70 })
+  })
+
   it('sets sizes and drags dividers, keeping each part at least 100 mm', () => {
     const front = across([null, cell('door')], [null, cell('drawers')])
     const set = setPartSize(front, [1], 333.4)
@@ -271,6 +298,20 @@ describe('warnings', () => {
     expect(warn(c).join(' ')).toMatch(/sink is over drawers/)
     const tall = cabinet({ ...c, top: null, legs: [cell('door', { insideDrawers: 2, insideDrawersHeight: 5000 })] })
     expect(warn(tall).join(' ')).toMatch(/drawers inside one compartment are set too tall/)
+  })
+
+  it('warns about shelves set too far apart to fit, over the drawers inside', () => {
+    const c = (shelfGap: number | null) =>
+      cabinet({
+        walls: { roomId: 'K', edgeIds: ['e0'], start: 0, length: 500 },
+        top: null,
+        legs: [cell('door', { hinge: 'left', shelves: 2, shelfAlign: 'bottom', shelfGap, insideDrawers: 1, insideDrawersHeight: 300 })],
+      })
+    const h = c(null).height - 300
+    expect(warn(c((h - 100) / 2))).toEqual([])
+    expect(warn(c((h - 100) / 2 + 10)).join(' ')).toMatch(/shelves in one compartment are set too far apart/)
+    // Unset, they just go as far apart as fits.
+    expect(warn({ ...c(null), height: 500 })).toEqual([])
   })
 
   it('measures a door beside a fixed panel by what the panel leaves it', () => {

@@ -3,7 +3,7 @@ import { cutsFor } from '../geometry/walls'
 import type { Cabinet, Cutout, LengthUnit } from '../types'
 import { formatLength } from '../units'
 import type { Placement } from './placement'
-import { doorSpace, insideSpace, layOut, MIN_PART, type LaidCell } from './sections'
+import { doorSpace, insideSpace, layOut, MIN_PART, shelfSpacing, type LaidCell } from './sections'
 
 /** An opening with its bottom below this is a doorway (or a gap down to the floor); higher up, a window. */
 const DOOR_SILL = 300
@@ -70,6 +70,7 @@ export function cabinetWarnings(solved: Solved, c: Cabinet, p: Placement, unit: 
   let wideDrawers = 0
   let lowDrawers = 0
   let tallInside = 0
+  let farShelves = 0
   let over = 0
   p.legs.forEach((leg, k) => {
     const front = c.legs[k]
@@ -93,6 +94,8 @@ export function cabinetWarnings(solved: Solved, c: Cabinet, p: Placement, unit: 
         if (inside.drawers.h / inside.n < LOW_DRAWER) lowDrawers++
         if ((cell.insideDrawersHeight ?? 0) > rect.h - MIN_PART + 0.5) tallInside++
       }
+      if ((cell.front === 'door' || cell.front === 'open') && cell.shelfGap != null && shelfSpacing(cell, inside.above.h)?.fits === false)
+        farShelves++
     }
   })
   if (over > 0.5) out.push('Some compartments are set wider (or taller) than the space they’re in.')
@@ -103,6 +106,10 @@ export function cabinetWarnings(solved: Solved, c: Cabinet, p: Placement, unit: 
   if (tallInside)
     out.push(
       `The drawers inside ${tallInside === 1 ? 'one compartment' : `${tallInside} compartments`} are set too tall, leaving under ${MIN_PART} mm over them; they’re drawn shorter.`,
+    )
+  if (farShelves)
+    out.push(
+      `The shelves in ${farShelves === 1 ? 'one compartment' : `${farShelves} compartments`} are set too far apart to fit, leaving under ${MIN_PART} mm past the last; they’re drawn closer.`,
     )
 
   if (c.top) {

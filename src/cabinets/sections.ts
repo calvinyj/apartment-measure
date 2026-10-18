@@ -77,6 +77,44 @@ export function insideSpace(c: CabinetCell, r: Rect): { n: number; drawers: Rect
   return { n, drawers: { ...r, y: r.y + r.h - h, h }, above: { ...r, h: r.h - h } }
 }
 
+/** Shelves from the top or the bottom are this far apart, unless set. */
+export const SHELF_GAP = 300
+/** A hanging rail is this far under the shelf over it (or the top). */
+const RAIL_DROP = 70
+
+/**
+ * How far apart a compartment's shelves are in `h` mm, when they go from the top or the bottom: as set, or
+ * closer if that would leave under MIN_PART past the last one (`fits` is false then). Null when they're
+ * spread evenly.
+ */
+export function shelfSpacing(c: CabinetCell, h: number): { gap: number; fits: boolean } | null {
+  if (!c.shelfAlign || c.shelves <= 0) return null
+  const want = Math.max(0, c.shelfGap ?? SHELF_GAP)
+  const gap = Math.min(want, Math.max(0, (h - MIN_PART) / c.shelves))
+  return { gap, fits: gap > want - 0.5 }
+}
+
+/**
+ * Where a compartment's shelves and hanging rail are in `r`, y down, top to bottom. Spread evenly with a rail,
+ * the shelves keep to the top over the hanging space. The rail hangs under the lowest shelf, or near the top
+ * when the shelves go from the bottom.
+ */
+export function shelvesIn(c: CabinetCell, r: Rect): { shelves: number[]; rail: number | null } {
+  const n = c.shelves
+  const s = shelfSpacing(c, r.h)
+  const shelves = Array.from({ length: n }, (_, i) =>
+    s
+      ? c.shelfAlign === 'top'
+        ? r.y + s.gap * (i + 1)
+        : r.y + r.h - s.gap * (n - i)
+      : c.rail
+        ? r.y + Math.min(SHELF_GAP * (i + 1), (r.h * (i + 1)) / (n + 2))
+        : r.y + (r.h * (i + 1)) / (n + 1),
+  )
+  const over = c.shelfAlign === 'bottom' || !n ? r.y : shelves[n - 1]
+  return { shelves, rail: c.rail ? over + RAIL_DROP : null }
+}
+
 /** A compartment laid out on the front: x from the left, y down from the top of the carcass. */
 export interface LaidCell {
   path: number[]
