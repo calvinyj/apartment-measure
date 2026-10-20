@@ -180,7 +180,7 @@ export function snapAngle(deg: number, r: SolvedRoom | null): number {
 
 /**
  * From p straight out to the room's walls, along and square to its longest wall (the plan's
- * axes, for most rooms): where each of the four lines meets the outline, and how far that is.
+ * axes, for most rooms): where each of the four lines meets the outline or a pillar, and how far that is.
  */
 export function wallDistances(r: SolvedRoom, p: Vec2): { to: Vec2; dist: number }[] {
   let longest = -1
@@ -190,13 +190,14 @@ export function wallDistances(r: SolvedRoom, p: Vec2): { to: Vec2; dist: number 
   })
   const u = longest < 0 ? { x: 1, y: 0 } : r.dirs[longest]
   const v = outward(u)
+  const sides = [r.outline, ...r.pillars.map((p) => p.footprint)].flatMap((pts) =>
+    pts.map((a, i): [Vec2, Vec2] => [a, pts[(i + 1) % pts.length]]),
+  )
   const out: { to: Vec2; dist: number }[] = []
   for (const d of [u, v, scale(u, -1), scale(v, -1)]) {
     let t = Infinity
-    const pts = r.outline
-    for (let i = 0; i < pts.length; i++) {
-      const a = pts[i]
-      const e = sub(pts[(i + 1) % pts.length], a)
+    for (const [a, b] of sides) {
+      const e = sub(b, a)
       const den = cross(d, e)
       if (Math.abs(den) < 1e-9) continue
       const ap = sub(a, p)

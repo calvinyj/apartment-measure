@@ -1,36 +1,36 @@
 import type { PlugPoint, Room, Vec2 } from '../types'
 import type { Solved, SolvedRoom } from './solve'
 import { add, dist, dot, scale, sub } from './vec'
+import { wallFaces } from './pillars'
 import { cutsFor } from './walls'
 
-/** Where a plug point sits: on the inside face of one of its room's walls. */
+/** Where a plug point sits: on the inside face of one of its room's walls, or on a pillar's face. */
 export interface WallSpot {
   /** on the wall's inside face, mm */
   at: Vec2
-  /** the room edge it's on */
+  /** the room edge it's on (for a pillar, the edge the pillar is entered on) */
   edge: number
   /** which way the wall runs, corner A to B; the room is on its right on screen */
   dir: Vec2
-  /** the ends of the straight wall it's on (all of its parts) */
+  /** the ends of the stretch of wall it's on (all of its parts): its corners, or the side of a pillar in the way */
   a: Vec2
   b: Vec2
+  /** the pillar whose face it's on */
+  pillar?: string
 }
 
-/** The point on the room's walls nearest p (open sides don't count); null for a room with no walls. */
+/** The point on the room's walls nearest p (open sides don't count; pillars' faces do); null for a room with no walls. */
 export function wallSpot(r: SolvedRoom, p: Vec2): WallSpot | null {
   let best: WallSpot | null = null
   let gap = Infinity
-  for (const g of r.groups) {
-    if (r.room.edges[g[0]].kind !== 'wall') continue
-    for (const i of g) {
-      const ab = sub(r.ends[i], r.starts[i])
-      const l2 = dot(ab, ab)
-      const t = l2 > 0 ? Math.max(0, Math.min(1, dot(sub(p, r.starts[i]), ab) / l2)) : 0
-      const at = add(r.starts[i], scale(ab, t))
-      if (dist(p, at) < gap) {
-        gap = dist(p, at)
-        best = { at, edge: i, dir: r.dirs[i], a: r.starts[g[0]], b: r.ends[g[g.length - 1]] }
-      }
+  for (const f of wallFaces(r)) {
+    const ab = sub(f.b, f.a)
+    const l2 = dot(ab, ab)
+    const t = l2 > 0 ? Math.max(0, Math.min(1, dot(sub(p, f.a), ab) / l2)) : 0
+    const at = add(f.a, scale(ab, t))
+    if (dist(p, at) < gap) {
+      gap = dist(p, at)
+      best = { at, edge: f.edge, dir: f.dir, a: f.from, b: f.to, pillar: f.pillar }
     }
   }
   return best
@@ -48,6 +48,7 @@ const PLUG_HEIGHT = 300
 
 /** Whether the spot is in a doorway or another opening down to near the floor, entered from either side of the wall. */
 export function inDoorway(solved: Solved, r: SolvedRoom, s: WallSpot): boolean {
+  if (s.pillar) return false
   const u = dot(sub(s.at, r.starts[s.edge]), r.dirs[s.edge])
   return cutsFor(solved, r, s.edge).some((c) => c.sill < PLUG_HEIGHT && c.from < u && u < c.to)
 }

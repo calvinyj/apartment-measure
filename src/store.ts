@@ -9,6 +9,7 @@ import {
   type FurnitureItem,
   type Light,
   type Opening,
+  type Pillar,
   type PlugPoint,
   type Project,
   type Room,
@@ -124,6 +125,9 @@ interface State {
   addOpening: (id: string, index: number, o: Omit<Opening, 'id'>) => void
   updateOpening: (id: string, index: number, openingId: string, patch: Partial<Opening>) => void
   removeOpening: (id: string, index: number, openingId: string) => void
+  addPillar: (id: string, index: number, p: Omit<Pillar, 'id'>) => void
+  updatePillar: (id: string, index: number, pillarId: string, patch: Partial<Pillar>) => void
+  removePillar: (id: string, index: number, pillarId: string) => void
 
   addLight: (light: Omit<Light, 'id'>) => string
   updateLight: (id: string, patch: Partial<Light>) => void
@@ -220,7 +224,7 @@ export const useStore = create<State>((set, get) => {
     insertVertex: (id, edgeIndex, pt) =>
       edit((p) =>
         mapRoom(p, id, (r) => {
-          // Splitting a wall invalidates its measurement; openings stay on the first half.
+          // Splitting a wall invalidates its measurement; openings and pillars stay on the first half.
           const old = r.edges[edgeIndex]
           const points = [...r.points]
           points.splice(edgeIndex + 1, 0, pt)
@@ -238,7 +242,16 @@ export const useStore = create<State>((set, get) => {
           const points = r.points.filter((_, i) => i !== index)
           // The previous edge absorbs this one; its length changed so drop the measurement.
           const edges = r.edges
-            .map((e, i) => (i === prev ? { ...e, measured: null, openings: [...e.openings, ...r.edges[index].openings] } : e))
+            .map((e, i) =>
+              i === prev
+                ? {
+                    ...e,
+                    measured: null,
+                    openings: [...e.openings, ...r.edges[index].openings],
+                    pillars: [...(e.pillars ?? []), ...(r.edges[index].pillars ?? [])],
+                  }
+                : e,
+            )
             .filter((_, i) => i !== index)
           return { ...r, points, edges }
         }),
@@ -256,6 +269,18 @@ export const useStore = create<State>((set, get) => {
     removeOpening: (id, index, openingId) =>
       edit((p) =>
         mapRoom(p, id, (r) => mapEdge(r, index, (e) => ({ ...e, openings: e.openings.filter((o) => o.id !== openingId) }))),
+      ),
+    addPillar: (id, index, pillar) =>
+      edit((p) => mapRoom(p, id, (r) => mapEdge(r, index, (e) => ({ ...e, pillars: [...(e.pillars ?? []), { ...pillar, id: uid() }] })))),
+    updatePillar: (id, index, pillarId, patch) =>
+      edit((p) =>
+        mapRoom(p, id, (r) =>
+          mapEdge(r, index, (e) => ({ ...e, pillars: (e.pillars ?? []).map((x) => (x.id === pillarId ? { ...x, ...patch } : x)) })),
+        ),
+      ),
+    removePillar: (id, index, pillarId) =>
+      edit((p) =>
+        mapRoom(p, id, (r) => mapEdge(r, index, (e) => ({ ...e, pillars: (e.pillars ?? []).filter((x) => x.id !== pillarId) }))),
       ),
 
     addLight: (light) => {

@@ -45,6 +45,19 @@ export interface Opening {
   sill: number
 }
 
+/** A pillar (column) standing against a wall, floor to ceiling. The floor it stands on isn't usable. */
+export interface Pillar {
+  id: string
+  /** in that corner of the wall, wherever the wall's length puts it; unset = `offset` from corner A */
+  at?: 'a' | 'b'
+  /** mm from the wall's start corner (inner face) to the near side of the pillar */
+  offset: number
+  /** across its face, along the wall */
+  width: number
+  /** how far it stands out from the wall into the room */
+  depth: number
+}
+
 /** Which side of the wall is outside the apartment; drives thickness defaults and gross area. */
 export type WallSide = 'auto' | 'internal' | 'external'
 
@@ -62,6 +75,8 @@ export interface Edge {
   /** paint colour of this room's face of the wall, as a hex code; missing/null = the layout's wall paint */
   paint?: string | null
   openings: Opening[]
+  /** pillars standing against this wall's inside face; missing = none */
+  pillars?: Pillar[]
 }
 
 export interface Room {

@@ -96,7 +96,8 @@ function solidRanges(active: Cut[], top: number): [number, number][] {
 /**
  * Walls of a room as prisms. Each room builds the thickness it owns (half of an
  * internal wall, all of an external one) outward from its inner face, with
- * mitred corners so neighbouring segments meet cleanly.
+ * mitred corners so neighbouring segments meet cleanly. Its pillars stand against
+ * them, floor to ceiling, painted like the wall they're on.
  */
 export function roomWallPieces(solved: Solved, r: SolvedRoom, displayHeight: number): WallPiece[] {
   const n = r.starts.length
@@ -145,6 +146,11 @@ export function roomWallPieces(solved: Solved, r: SolvedRoom, displayHeight: num
       const outer = footprint.map((q, j) => onOuter(q) && onOuter(footprint[(j + 1) % footprint.length]))
       for (const [y0, y1] of solidRanges(active, top)) pieces.push({ footprint, y0, y1, edge: k, outer, fullHeight: y1 >= top })
     }
+  }
+  for (const p of r.pillars) {
+    // Wound the way the walls' footprints are.
+    const footprint = [...p.footprint].reverse()
+    pieces.push({ footprint, y0: 0, y1: top, edge: p.edge, outer: footprint.map(() => false), fullHeight: true })
   }
   return pieces
 }

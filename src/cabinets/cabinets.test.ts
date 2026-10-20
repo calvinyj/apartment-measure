@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { solveProject } from '../geometry/solve'
-import { DEFAULT_SETTINGS, type Cabinet, type Edge, type Opening, type Project, type Room } from '../types'
+import { DEFAULT_SETTINGS, type Cabinet, type Edge, type Opening, type Pillar, type Project, type Room } from '../types'
 import { cabinetWarnings, cellUnder } from './checks'
 import { applyTemplate, asTemplate, createCabinet, tapWall, withWalls } from './edit'
 import { addMaterials, allBoard, cabinetMaterials, innerBoard, outerBoard, sheetsFor } from './materials'
@@ -275,6 +275,22 @@ describe('warnings', () => {
     expect(warn(c, room([[opening({ offset: 3000 })]]))).toEqual([])
     expect(warn(c, room([[opening({ kind: 'window', offset: 1000, sill: 1000, height: 1200 })]]))).toEqual([])
     expect(warn(c, room([[opening({ kind: 'window', offset: 1000, sill: 800, height: 1200 })]])).join(' ')).toMatch(/sill below the top/)
+  })
+
+  it('warns when it runs into a pillar, on its wall or in the corner of the next', () => {
+    const c = cabinet({ walls: { roomId: 'K', edgeIds: ['e0'], start: 0, length: null } })
+    const withPillar = (edge: number, pillar: Partial<Pillar>) => {
+      const r = room()
+      r.edges[edge].pillars = [{ id: 'p', offset: 0, width: 400, depth: 300, ...pillar }]
+      return r
+    }
+    expect(warn(c, withPillar(0, { at: 'b' })).join(' ')).toMatch(/runs into the pillar on wall 1/)
+    // In the corner of wall 2, so it stands out into wall 1's far end.
+    expect(warn(c, withPillar(1, { at: 'a' })).join(' ')).toMatch(/runs into the pillar on wall 2/)
+    // Stopped short of it.
+    expect(warn(cabinet({ walls: { ...c.walls, length: 3600 } }), withPillar(0, { at: 'b' }))).toEqual([])
+    // Further along wall 2 than the cabinet is deep.
+    expect(warn(c, withPillar(1, { offset: 1000 }))).toEqual([])
   })
 
   it('warns about wide single doors, and a sink over drawers', () => {
