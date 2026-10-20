@@ -7,7 +7,7 @@ import { outline, wallNumber, type Placement } from './placement'
 import { doorSpace, insideSpace, layOut, MIN_PART, shelfSpacing, type LaidCell } from './sections'
 
 /** An opening with its bottom below this is a doorway (or a gap down to the floor); higher up, a window. */
-const DOOR_SILL = 300
+export const DOOR_SILL = 300
 /** Stone left in front of (or behind) a cut-out, at least. */
 export const MIN_STONE_EDGE = 50
 const WIDE_DOOR = 600

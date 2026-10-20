@@ -101,7 +101,7 @@ function clipToConvex(a: Vec2, b: Vec2, poly: Vec2[], tol: number): [number, num
 }
 
 /** [lo, hi] less the given intervals. */
-function clearOf(lo: number, hi: number, taken: [number, number][]): [number, number][] {
+export function clearOf(lo: number, hi: number, taken: [number, number][]): [number, number][] {
   const out: [number, number][] = []
   let at = lo
   for (const [a, b] of [...taken].sort((x, y) => x[0] - y[0])) {

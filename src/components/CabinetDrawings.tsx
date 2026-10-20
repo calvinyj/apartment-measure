@@ -1,9 +1,13 @@
 import { useLayoutEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react'
-import { cabinetTop } from '../cabinets/checks'
+import { cabinetTop, DOOR_SILL } from '../cabinets/checks'
 import { doorLeaves } from '../cabinets/materials'
-import { legPoint, outline, type Placement } from '../cabinets/placement'
+import { legPoint, outline, type CabinetLeg, type Placement } from '../cabinets/placement'
 import { doorSpace, insideSpace, layOut, moveDivider, samePath, shelvesIn, type LaidCell, type LaidDivider, type Rect } from '../cabinets/sections'
+import { clearOf, overlapsPillar, type PlacedPillar } from '../geometry/pillars'
 import { bbox } from '../geometry/polygon'
+import type { Solved } from '../geometry/solve'
+import { dot, lineIntersect, sub } from '../geometry/vec'
+import { clipSlab, cutsFor } from '../geometry/walls'
 import type { ApplianceKind, Cabinet, CabinetCell, CabinetSection, Cutout, Vec2 } from '../types'
 import { parseHexColor } from './common'
 
@@ -608,16 +612,67 @@ function turner(p: Placement) {
 
 const pts = (ps: Vec2[]) => ps.map((q) => `${q.x},${q.y}`).join(' ')
 
-/** The cabinet from above, with its walls, top and cut-outs; the first wall along the top. */
-export function TopView({ cabinet: c, placement: p, className = 'cab-drawing' }: { cabinet: Cabinet; placement: Placement; className?: string }) {
+/** How near one of the cabinet's walls a pillar has to stand to be drawn against it, mm. */
+const NEAR_WALL = 20
+
+/**
+ * The cabinet from above, with its walls (their windows and doorways), any pillars against them or in its
+ * way, and its top and cut-outs; the first wall along the top.
+ */
+export function TopView({
+  solved,
+  cabinet: c,
+  placement: p,
+  className = 'cab-drawing',
+}: {
+  solved: Solved
+  cabinet: Cabinet
+  placement: Placement
+  className?: string
+}) {
   const [ref, screen] = useBoxSize<HTMLDivElement>()
   const turn = turner(p)
   const D = c.depth
   const stoneDepth = c.top ? D + c.top.overhang : D
   const WALL_T = 120
-  const walls = p.legs.map((leg) =>
-    [legPoint(leg, 0), legPoint(leg, leg.wallLength), legPoint(leg, leg.wallLength, -WALL_T), legPoint(leg, 0, -WALL_T)].map(turn),
-  )
+  // Where the outsides of two walls meet, so they join at the corner the cabinet turns.
+  const mitre = (a: CabinetLeg, b: CabinetLeg) => lineIntersect(legPoint(a, 0, -WALL_T), a.dir, legPoint(b, 0, -WALL_T), b.dir)
+  const walls = p.legs.map((leg, k) => {
+    const L = leg.wallLength
+    const band = [
+      legPoint(leg, 0),
+      legPoint(leg, L),
+      (k + 1 < p.legs.length && mitre(leg, p.legs[k + 1])) || legPoint(leg, L, -WALL_T),
+      (k > 0 && mitre(p.legs[k - 1], leg)) || legPoint(leg, 0, -WALL_T),
+    ]
+    const us = band.map((q) => dot(sub(q, leg.origin), leg.dir))
+    // Openings entered on either side of the wall.
+    const cuts = cutsFor(solved, p.room, leg.group[0])
+      .map((x) => ({ ...x, from: Math.max(0, x.from), to: Math.min(L, x.to) }))
+      .filter((x) => x.to > x.from)
+    const slab = (lo: number, hi: number) => clipSlab(band, leg.origin, leg.dir, lo, hi).map(turn)
+    return {
+      // A doorway (or an opening down to the floor) is a gap.
+      solid: clearOf(Math.min(...us), Math.max(...us), cuts.map((x) => [x.from, x.to])).map(([lo, hi]) => slab(lo, hi)),
+      windows: cuts
+        .filter((x) => x.sill >= DOOR_SILL)
+        .map((x) => ({
+          cut: x,
+          shape: slab(x.from, x.to),
+          glass: [legPoint(leg, x.from, -WALL_T / 2), legPoint(leg, x.to, -WALL_T / 2)].map(turn),
+        })),
+    }
+  })
+  // Pillars against its walls, and any other it runs into.
+  const reach = outline(p, stoneDepth)
+  const against = (pl: PlacedPillar, leg: CabinetLeg) => {
+    const us = pl.footprint.map((q) => dot(sub(q, leg.origin), leg.dir))
+    const vs = pl.footprint.map((q) => dot(sub(q, leg.origin), leg.inward))
+    return Math.min(...vs) <= NEAR_WALL && Math.max(...vs) > 0 && Math.min(...us) < leg.wallLength && Math.max(...us) > 0
+  }
+  const pillars = p.room.pillars
+    .filter((pl) => p.legs.some((leg) => against(pl, leg)) || overlapsPillar(reach, pl))
+    .map((pl) => ({ pillar: pl.pillar, pts: pl.footprint.map(turn) }))
   const carcass = outline(p, D).map(turn)
   const stone = c.top ? outline(p, stoneDepth).map(turn) : null
   // Dashed lines are drawn over the stone, else the fronts (a wall cabinet's outline only).
@@ -644,7 +699,11 @@ export function TopView({ cabinet: c, placement: p, className = 'cab-drawing' }:
     const deg = (Math.atan2(b2.y - a.y, b2.x - a.x) * 180) / Math.PI
     return { at: turn(legPoint(leg, (leg.from + leg.to) / 2, -WALL_T)), text: mm(leg.to - leg.from), deg: deg > 90 || deg < -90 ? deg + 180 : deg }
   })
-  const b = bbox([...walls.flat(), ...(stone ?? carcass)])
+  const b = bbox([
+    ...walls.flatMap((w) => [...w.solid.flat(), ...w.windows.flatMap((x) => x.shape)]),
+    ...pillars.flatMap((x) => x.pts),
+    ...(stone ?? carcass),
+  ])
   const content: Box = { minX: b.minX, minY: b.minY, w: Math.max(1, b.w), h: Math.max(1, b.h) }
   const ready = screen.w > 0 && screen.h > 0
   const { k, viewBox } = ready ? fitView(content, screen, { l: 30, r: 30, t: 30, b: 16 }) : { k: 1, viewBox: `${b.minX} ${b.minY} ${b.w} ${b.h}` }
@@ -652,7 +711,18 @@ export function TopView({ cabinet: c, placement: p, className = 'cab-drawing' }:
     <div ref={ref} className={className}>
       <svg viewBox={viewBox} width="100%" height="100%">
         {walls.map((w, i) => (
-          <polygon key={i} points={pts(w)} fill={INK} />
+          <g key={i}>
+            {w.solid.map((s, j) => (
+              <polygon key={j} points={pts(s)} fill={INK} stroke={INK} strokeWidth={0.5} vectorEffect="non-scaling-stroke" />
+            ))}
+            {w.windows.map(({ cut, shape, glass: [a, b2] }, j) => (
+              <g key={j}>
+                <title>{`Window, ${mm(cut.to - cut.from)} wide, sill ${mm(cut.sill)} mm`}</title>
+                <polygon points={pts(shape)} fill="#fff" stroke={INK} strokeWidth={1} vectorEffect="non-scaling-stroke" />
+                <line x1={a.x} y1={a.y} x2={b2.x} y2={b2.y} stroke={INK} strokeWidth={1} vectorEffect="non-scaling-stroke" />
+              </g>
+            ))}
+          </g>
         ))}
         <polygon
           points={pts(carcass)}
@@ -674,6 +744,12 @@ export function TopView({ cabinet: c, placement: p, className = 'cab-drawing' }:
               {CUTOUT_LABEL[x.kind]}
             </text>
           </g>
+        ))}
+        {/* Over the cabinet and its cut-outs, so one it runs into still shows. */}
+        {pillars.map(({ pillar, pts: q }) => (
+          <polygon key={pillar.id} points={pts(q)} fill={INK} stroke={INK} strokeWidth={0.5} vectorEffect="non-scaling-stroke">
+            <title>{`Pillar, ${mm(pillar.width)} × ${mm(pillar.depth)} mm`}</title>
+          </polygon>
         ))}
         {lengths.map((l, i) => (
           <text key={i} x={l.at.x} y={l.at.y} fontSize={10 / k} textAnchor="middle" fill={INK} transform={`rotate(${l.deg} ${l.at.x} ${l.at.y}) translate(0 ${-6 / k})`}>

@@ -23,7 +23,7 @@ export interface Cut {
 }
 
 /** Keep the part of a convex polygon where dot(p - o, d) is between lo and hi. */
-function clipSlab(poly: Vec2[], o: Vec2, d: Vec2, lo: number, hi: number): Vec2[] {
+export function clipSlab(poly: Vec2[], o: Vec2, d: Vec2, lo: number, hi: number): Vec2[] {
   const clip = (pts: Vec2[], f: (p: Vec2) => number) => {
     const out: Vec2[] = []
     for (let i = 0; i < pts.length; i++) {
