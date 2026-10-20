@@ -3,7 +3,7 @@ import type { Solved } from '../geometry/solve'
 import { cutsFor } from '../geometry/walls'
 import type { Cabinet, Cutout, LengthUnit } from '../types'
 import { formatLength } from '../units'
-import { outline, wallNumber, type Placement } from './placement'
+import { cornerOf, outline, wallNumber, type Placement } from './placement'
 import { doorSpace, insideSpace, layOut, MIN_PART, shelfSpacing, type LaidCell } from './sections'
 
 /** An opening with its bottom below this is a doorway (or a gap down to the floor); higher up, a window. */
@@ -28,6 +28,17 @@ export function cellUnder(c: Cabinet, p: Placement, x: Cutout): LaidCell | null 
   if (!leg || !front) return null
   const cells = layOut(front, { x: 0, y: 0, w: leg.width, h: c.height }).cells.filter((l) => l.rect.x <= x.x && x.x <= l.rect.x + l.rect.w)
   return cells.sort((a, b) => a.rect.y - b.rect.y)[0] ?? null
+}
+
+/** The compartments beside inside corner k, on the side it opens to: the way into it. */
+export function besideCorner(c: Cabinet, p: Placement, k: number): LaidCell[] {
+  const open = cornerOf(c, k).open
+  const j = open === 'left' ? k : k + 1
+  const leg = p.legs[j]
+  const front = c.legs[j]
+  if (!leg || !front) return []
+  const w = Math.max(0, leg.width)
+  return layOut(front, { x: 0, y: 0, w, h: c.height }).cells.filter((l) => (open === 'left' ? l.rect.x + l.rect.w > w - 0.5 : l.rect.x < 0.5))
 }
 
 const CUTOUT_LABEL = { sink: 'sink', hob: 'hob', basin: 'basin' } as const
@@ -103,6 +114,14 @@ export function cabinetWarnings(solved: Solved, c: Cabinet, p: Placement, unit: 
       if ((cell.front === 'door' || cell.front === 'open') && cell.shelfGap != null && shelfSpacing(cell, inside.above.h)?.fits === false)
         farShelves++
     }
+  })
+  p.legs.slice(1).forEach((leg, k) => {
+    const corner = cornerOf(c, k)
+    if (!corner.shelves) return
+    if (corner.shelfGap != null && shelfSpacing(corner, c.height)?.fits === false) farShelves++
+    const way = p.legs[corner.open === 'left' ? k : k + 1]
+    if (!besideCorner(c, p, k).some((l) => l.cell.front === 'door' || l.cell.front === 'open'))
+      out.push(`The corner between walls ${p.legs[k].wallNo} and ${leg.wallNo} has shelves, but no door beside it on wall ${way.wallNo} to reach them by.`)
   })
   if (over > 0.5) out.push('Some compartments are set wider (or taller) than the space they’re in.')
   if (wideDoors) out.push(`${plural(wideDoors, 'door')} ${wideDoors === 1 ? 'is' : 'are'} over ${WIDE_DOOR} mm wide: heavy to open, and may sag. Try a pair.`)

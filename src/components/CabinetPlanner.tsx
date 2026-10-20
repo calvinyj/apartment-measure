@@ -1,8 +1,8 @@
 import { useEffect, useMemo, useState } from 'react'
-import { cabinetTop, cabinetWarnings, cellUnder } from '../cabinets/checks'
+import { besideCorner, cabinetTop, cabinetWarnings, cellUnder } from '../cabinets/checks'
 import { applyTemplate, createCabinet, freshName, frontsEdited, tapWall, withWalls } from '../cabinets/edit'
 import { cabinetMaterials, doorLeaves } from '../cabinets/materials'
-import { legPoint, outline, placeCabinet, shapeLabel, type Placement } from '../cabinets/placement'
+import { cornerOf, legPoint, outline, placeCabinet, shapeLabel, type Placement } from '../cabinets/placement'
 import {
   doorSpace,
   hasFixed,
@@ -34,6 +34,7 @@ import {
   type Cabinet,
   type CabinetFront,
   type CabinetKind,
+  type CabinetCorner,
   type CabinetSection,
   type CutoutKind,
   type DoorHinge,
@@ -44,7 +45,7 @@ import {
   type Worktop,
 } from '../types'
 import { formatLength } from '../units'
-import { APPLIANCE_LABEL, CUTOUT_LABEL, Elevation, TopView, type CellRef } from './CabinetDrawings'
+import { APPLIANCE_LABEL, CUTOUT_LABEL, Elevation, isCornerRef, TopView, type CellRef, type CornerRef } from './CabinetDrawings'
 import { fmtM, frontsText, MaterialsTable } from './CabinetMaterials'
 import { ColorInput, Field, LengthInput, PlanImageToggle, Segmented, useRememberedCheck, useSolved } from './common'
 import { FloorPlan, useFloorPlan, type FloorPlanData } from './FloorPlan'
@@ -120,7 +121,7 @@ export function CabinetPlanner() {
   const edit = useStore((s) => s.cabinetEdit)
   const solved = useSolved()
   const plan = useFloorPlan(solved)
-  const [sel, setSel] = useState<CellRef | null>(null)
+  const [sel, setSel] = useState<CellRef | CornerRef | null>(null)
   const [inside, setInside] = useRememberedCheck('cabinet-inside', true)
   // The cabinet whose walls taps on the plan change: one just added, or after Change walls. Others stay put.
   const [pickingId, setPickingId] = useState<string | null>(null)
@@ -578,7 +579,12 @@ function WallsStep({
               </tbody>
             </table>
           </div>
-          {n > 1 && <p className="muted small">At each corner, a front loses the depth of the other leg ({mm(c.depth)}): that corner is reached only from the first leg.</p>}
+          {n > 1 && (
+            <p className="muted small">
+              At each corner, a front loses the depth of the other leg ({mm(c.depth)}). The corner is reached from the side, through one
+              leg’s end compartment: set which, and shelves in it, under Compartments.
+            </p>
+          )}
           <Warnings c={c} solved={solved} p={p} />
         </>
       )}
@@ -694,17 +700,20 @@ function FrontsStep({
   c,
   solved,
   p,
-  sel,
+  sel: picked,
   setSel,
 }: {
   c: Cabinet
   solved: Solved
   p: Placement
-  sel: CellRef | null
-  setSel: (s: CellRef | null) => void
+  sel: CellRef | CornerRef | null
+  setSel: (s: CellRef | CornerRef | null) => void
 }) {
   const unit = useStore((s) => s.project.settings.inputUnit)
   const updateCabinet = useStore((s) => s.updateCabinet)
+  if (picked && isCornerRef(picked) && picked.corner + 1 < p.legs.length)
+    return <CornerFields c={c} solved={solved} p={p} k={picked.corner} done={() => setSel(null)} />
+  const sel = picked && !isCornerRef(picked) ? picked : null
   const setLeg = (k: number, front: CabinetSection) => updateCabinet(c.id, { legs: c.legs.map((l, i) => (i === k ? front : l)) })
   const front = sel ? c.legs[sel.leg] : null
   const target = front && sel ? sectionAt(front, sel.path) : null
@@ -716,7 +725,7 @@ function FrontsStep({
     if (frontsEdited(solved, c) && !confirm('Put its compartments (and cut-outs) back as its template made them?')) return
     const t = templatesFor(c.kind).find((x) => x.id === c.template) ?? defaultTemplate(c.kind)
     const patch = applyTemplate(solved, c, t)
-    updateCabinet(c.id, { legs: patch.legs, top: c.top && patch.top ? { ...c.top, cutouts: patch.top.cutouts } : c.top })
+    updateCabinet(c.id, { legs: patch.legs, corners: patch.corners, top: c.top && patch.top ? { ...c.top, cutouts: patch.top.cutouts } : c.top })
     setSel(null)
   }
 
@@ -724,7 +733,10 @@ function FrontsStep({
     return (
       <div className="stack">
         <Header c={c} step="fronts" />
-        <p>Tap a compartment on the drawing to change its front, or divide it. Drag the line between two compartments to resize them.</p>
+        <p>
+          Tap a compartment on the drawing to change its front, or divide it. Drag the line between two compartments to resize them.
+          {p.legs.length > 1 && ' Tap a corner to put shelves in it.'}
+        </p>
         <p className="muted small">
           Sizes are to the middle of the divider either side. A compartment without a size shares what the others leave, so
           it grows or shrinks with the cabinet.
@@ -1003,7 +1015,88 @@ function FrontsStep({
   )
 }
 
-function TopStep({ c, solved, p, sel }: { c: Cabinet; solved: Solved; p: Placement; sel: CellRef | null }) {
+/** An inside corner, tapped on the drawing: the side it's reached from, and shelves in it. */
+function CornerFields({ c, solved, p, k, done }: { c: Cabinet; solved: Solved; p: Placement; k: number; done: () => void }) {
+  const unit = useStore((s) => s.project.settings.inputUnit)
+  const updateCabinet = useStore((s) => s.updateCabinet)
+  const corner = cornerOf(c, k)
+  const a = p.legs[k]
+  const b = p.legs[k + 1]
+  const set = (patch: Partial<CabinetCorner>) =>
+    updateCabinet(c.id, { corners: p.legs.slice(1).map((_, j) => (j === k ? { ...corner, ...patch } : cornerOf(c, j))) })
+  const spacing = shelfSpacing(corner, c.height)
+  const way = besideCorner(c, p, k).find((l) => l.cell.front === 'door' || l.cell.front === 'open')
+  const end = corner.open === 'left' ? 'right' : 'left'
+  return (
+    <div className="stack">
+      <Header c={c} step="fronts" />
+      <div className="row between">
+        <h3>
+          Corner · walls {a.wallNo} and {b.wallNo}
+        </h3>
+        <button className="link" onClick={done}>
+          Done
+        </button>
+      </div>
+      <p className="muted small">
+        {Math.round(b.cornerLeft).toLocaleString()} × {mm(c.depth)} from above, {mm(c.height)} high. It has no front: one leg’s box runs
+        on into it, behind the end of the other.
+      </p>
+      <Field
+        label="Reached from"
+        hint={
+          way
+            ? `Through the ${mm(way.rect.w)} compartment at the ${end} end of wall ${(corner.open === 'left' ? a : b).wallNo}, round the side.`
+            : `Its compartment at the ${end} end has no doors to reach in by.`
+        }
+      >
+        <Segmented
+          value={corner.open}
+          options={[
+            { value: 'left', label: `Wall ${a.wallNo} (left)` },
+            { value: 'right', label: `Wall ${b.wallNo} (right)` },
+          ]}
+          onChange={(open) => set({ open })}
+        />
+      </Field>
+      <Field label="Shelves">
+        <select value={corner.shelves} onChange={(e) => set({ shelves: Number(e.target.value) })}>
+          {Array.from({ length: 11 }, (_, n) => (
+            <option key={n} value={n}>
+              {n}
+            </option>
+          ))}
+        </select>
+      </Field>
+      {corner.shelves > 0 && (
+        <Field label="Shelves spaced" hint="To line them up with the shelves beside it, space both the same way.">
+          <Segmented
+            value={corner.shelfAlign ?? 'even'}
+            options={SHELF_ALIGN}
+            onChange={(a) => set({ shelfAlign: a === 'even' ? undefined : a })}
+          />
+        </Field>
+      )}
+      {spacing && (
+        <Field
+          label="Space between them"
+          hint={`From ${corner.shelfAlign === 'top' ? 'the top' : 'the bottom'} to the first shelf, and from each to the next. ${
+            spacing.fits
+              ? `Leaves ${mm(c.height - corner.shelves * spacing.gap)} ${corner.shelfAlign === 'top' ? 'under the last' : 'over the top one'}.`
+              : `${mm(corner.shelfGap ?? SHELF_GAP)} apart doesn’t fit ${corner.shelves}, so they’re ${mm(spacing.gap)} apart.`
+          }`}
+        >
+          <LengthInput value={corner.shelfGap ?? null} placeholder={spacing.gap} unit={unit} onChange={(v) => set({ shelfGap: v })} />
+        </Field>
+      )}
+      <Warnings c={c} solved={solved} p={p} />
+      <Nav c={c} step="fronts" />
+    </div>
+  )
+}
+
+function TopStep({ c, solved, p, sel: picked }: { c: Cabinet; solved: Solved; p: Placement; sel: CellRef | CornerRef | null }) {
+  const sel = picked && !isCornerRef(picked) ? picked : null
   const unit = useStore((s) => s.project.settings.inputUnit)
   const updateCabinet = useStore((s) => s.updateCabinet)
   const t = c.top

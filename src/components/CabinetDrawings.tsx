@@ -1,14 +1,14 @@
 import { useLayoutEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react'
 import { cabinetTop, DOOR_SILL } from '../cabinets/checks'
 import { doorLeaves } from '../cabinets/materials'
-import { legPoint, outline, type CabinetLeg, type Placement } from '../cabinets/placement'
-import { doorSpace, insideSpace, layOut, moveDivider, samePath, shelvesIn, type LaidCell, type LaidDivider, type Rect } from '../cabinets/sections'
+import { boxSpan, cornerOf, legPoint, outline, type CabinetLeg, type Placement } from '../cabinets/placement'
+import { doorSpace, insideSpace, layOut, moveDivider, samePath, shelvesIn, type Laid, type LaidCell, type LaidDivider, type Rect, type Shelving } from '../cabinets/sections'
 import { clearOf, overlapsPillar, type PlacedPillar } from '../geometry/pillars'
 import { bbox } from '../geometry/polygon'
 import type { Solved } from '../geometry/solve'
 import { dot, lineIntersect, sub } from '../geometry/vec'
 import { clipSlab, cutsFor } from '../geometry/walls'
-import type { ApplianceKind, Cabinet, CabinetCell, CabinetSection, Cutout, Vec2 } from '../types'
+import type { ApplianceKind, Cabinet, CabinetCorner, CabinetSection, Cutout, Vec2 } from '../types'
 import { parseHexColor } from './common'
 
 const INK = '#3f4652'
@@ -42,7 +42,7 @@ export function inkOn(fill: string): Ink {
   return contrast(l, luminance(LIGHT_INK.line)) > contrast(l, luminance(INK)) ? LIGHT_INK : DARK_INK
 }
 
-/** Gap between legs in the unfolded elevation, mm. */
+/** Gap where two walls meet in the unfolded elevation, mm: between a corner and the leg it's closed off by. */
 const LEG_GAP = 240
 /** Gap between neighbouring fronts, mm. */
 const GAP = 3
@@ -100,8 +100,8 @@ const line = (x1: number, y1: number, x2: number, y2: number, props: Record<stri
   <line x1={x1} y1={y1} x2={x2} y2={y2} vectorEffect="non-scaling-stroke" {...props} />
 )
 
-/** Shelves, and a hanging rail, inside a compartment. */
-function Inside({ r, cell, k, ink }: { r: Rect; cell: CabinetCell; k: number; ink: Ink }) {
+/** Shelves, and a hanging rail, inside a compartment (or a corner). */
+function Inside({ r, cell, k, ink }: { r: Rect; cell: Shelving; k: number; ink: Ink }) {
   const { shelves: ys, rail: railY } = shelvesIn(cell, r)
   // Clothes hang down to the shelf under the rail, if there is one.
   const drop = railY == null ? 0 : Math.min(600, r.h * 0.45, (ys.find((y) => y > railY) ?? r.y + r.h) - railY - 40)
@@ -327,6 +327,13 @@ export interface CellRef {
   path: number[]
 }
 
+/** An inside corner, between legs `corner` and `corner + 1`. */
+export interface CornerRef {
+  corner: number
+}
+
+export const isCornerRef = (s: CellRef | CornerRef): s is CornerRef => 'corner' in s
+
 /** A dimension along x at height y, with its length in the middle. */
 function DimX({ x1, x2, y, k, text }: { x1: number; x2: number; y: number; k: number; text: string }) {
   const t = 4 / k
@@ -380,8 +387,8 @@ export function Elevation({
 }: {
   cabinet: Cabinet
   placement: Placement
-  selected?: CellRef | null
-  onSelect?: (s: CellRef | null) => void
+  selected?: CellRef | CornerRef | null
+  onSelect?: (s: CellRef | CornerRef | null) => void
   onChangeLeg?: (leg: number, front: CabinetSection) => void
   inside?: boolean
   /** sizes along the bottom and up the right */
@@ -394,15 +401,27 @@ export function Elevation({
   const svgRef = useRef<SVGSVGElement>(null)
   const drag = useRef<{ leg: number; d: LaidDivider; sizes: number[]; root: CabinetSection; x: number; y: number; k: number } | null>(null)
 
-  const legs = p.legs.map((leg, i) => ({ leg, front: c.legs[i] }))
+  // Left to right: each leg's fronts, and between two legs their corner, beside the leg it opens to (whose box
+  // runs on into it), then a gap where the walls meet.
   let x = 0
-  const placed = legs.map(({ leg, front }, i) => {
+  const placed: { i: number; leg: CabinetLeg; front: CabinetSection | undefined; x: number; w: number; laid: Laid | null }[] = []
+  const corners: { k: number; corner: CabinetCorner; x: number; w: number; meet: number }[] = []
+  p.legs.forEach((leg, i) => {
+    if (i > 0) {
+      const corner = cornerOf(c, i - 1)
+      const w = Math.max(0, leg.cornerLeft)
+      if (corner.open === 'left') corners.push({ k: i - 1, corner, x, w, meet: x + w + LEG_GAP / 2 })
+      else corners.push({ k: i - 1, corner, x: x + LEG_GAP, w, meet: x + LEG_GAP / 2 })
+      x += w + LEG_GAP
+    }
     const w = Math.max(0, leg.width)
-    const at = x
-    x += w + LEG_GAP
-    return { i, leg, front, x: at, w, laid: front ? layOut(front, { x: 0, y: 0, w, h: c.height }) : null }
+    const front = c.legs[i]
+    placed.push({ i, leg, front, x, w, laid: front ? layOut(front, { x: 0, y: 0, w, h: c.height }) : null })
+    x += w
   })
-  const total = Math.max(1, x - LEG_GAP)
+  const total = Math.max(1, x)
+  const cellSel = selected && !isCornerRef(selected) ? selected : null
+  const inner = inkOn(c.carcass.color)
   const carcassTop = -(c.bottom + c.height)
   const stone = c.top?.thickness ?? 0
   const upstand = c.top?.upstand ?? 0
@@ -475,7 +494,7 @@ export function Elevation({
               <rect x={0} y={y0} width={w} height={c.height} fill={c.carcass.color} stroke={INK} strokeWidth={1.2} vectorEffect="non-scaling-stroke" />
               <g transform={`translate(0 ${y0})`}>
                 {laid?.cells.map((l) => {
-                  const on = samePath(selected?.leg === i ? selected.path : null, l.path)
+                  const on = samePath(cellSel?.leg === i ? cellSel.path : null, l.path)
                   return (
                     <g
                       key={l.path.join('.')}
@@ -573,17 +592,53 @@ export function Elevation({
             </g>
           )
         })}
-        {/* corners between legs */}
-        {placed.slice(1).map(({ i, x: lx }) => (
-          <g key={`corner${i}`} pointerEvents="none">
-            {line(lx - LEG_GAP / 2, 0, lx - LEG_GAP / 2, top, { stroke: MUTED, strokeWidth: 1, strokeDasharray: '10 4 2 4' })}
-            {captions && LEG_GAP * k > 44 && (
-              <text x={lx - LEG_GAP / 2} y={top - 10 / k} fontSize={10 / k} textAnchor="middle" fill={MUTED}>
-                corner
-              </text>
-            )}
-          </g>
-        ))}
+        {/* each inside corner: hidden behind the other leg, so dashed, and closed off on that side */}
+        {corners.map(({ k: j, corner, x: cx, w: cw, meet }) => {
+          const on = !!selected && isCornerRef(selected) && selected.corner === j
+          const way = p.legs[corner.open === 'left' ? j : j + 1]
+          const closed = corner.open === 'left' ? cw : 0
+          return (
+            <g key={`corner${j}`}>
+              {line(meet, 0, meet, top, { stroke: MUTED, strokeWidth: 1, strokeDasharray: '10 4 2 4', pointerEvents: 'none' })}
+              <g
+                transform={`translate(${cx} ${carcassTop})`}
+                onClick={(e) => {
+                  if (!onSelect) return
+                  e.stopPropagation()
+                  onSelect({ corner: j })
+                }}
+                style={onSelect ? { cursor: 'pointer' } : undefined}
+              >
+                <title>{`Corner, reached through wall ${way.wallNo}${corner.shelves ? `, ${corner.shelves} ${corner.shelves === 1 ? 'shelf' : 'shelves'}` : ''}`}</title>
+                <rect x={0} y={0} width={cw} height={c.height} fill={c.carcass.color} />
+                <rect x={0} y={0} width={cw} height={c.height} fill="#000" fillOpacity={0.07} />
+                <Inside r={inset({ x: 0, y: 0, w: cw, h: c.height })} cell={corner} k={k} ink={inner} />
+                <rect x={0} y={0} width={cw} height={c.height} fill="none" stroke={INK} strokeWidth={1} strokeDasharray="6 4" vectorEffect="non-scaling-stroke" />
+                {line(closed, 0, closed, c.height, { stroke: INK, strokeWidth: 2.5 })}
+                {on && (
+                  <rect
+                    x={0}
+                    y={0}
+                    width={cw}
+                    height={c.height}
+                    fill={ACCENT}
+                    fillOpacity={0.12}
+                    stroke={ACCENT}
+                    strokeWidth={3}
+                    vectorEffect="non-scaling-stroke"
+                    pointerEvents="none"
+                  />
+                )}
+              </g>
+              {captions && cw * k > 44 && (
+                <text x={cx + cw / 2} y={top - 10 / k} fontSize={10 / k} textAnchor="middle" fill={MUTED} pointerEvents="none">
+                  {corner.open === 'left' ? '← corner' : 'corner →'}
+                </text>
+              )}
+              {dims && <DimX x1={cx} x2={cx + cw} y={18 / k} k={k} text={mm(cw)} />}
+            </g>
+          )
+        })}
         {/* heights at the right */}
         {dims && (
           <g>
@@ -690,8 +745,11 @@ export function TopView({
     ].map(turn)
     return [{ x, corners, centre: turn(legPoint(leg, u, v)) }]
   })
-  // Where each leg after a corner starts: the corner is built into the leg before it.
-  const seams = p.legs.slice(1).map((leg) => [legPoint(leg, leg.cornerLeft), legPoint(leg, leg.cornerLeft, D)].map(turn))
+  // At each corner, where the box of the leg it doesn't open to stops: the other one's runs on into it.
+  const seams = p.legs.slice(1).map((leg, k) => {
+    const [stops, u] = cornerOf(c, k).open === 'left' ? [leg, boxSpan(c, p, k + 1)[0]] : [p.legs[k], boxSpan(c, p, k)[1]]
+    return [legPoint(stops, u), legPoint(stops, u, D)].map(turn)
+  })
   // Each leg's length along its wall, written outside the wall and turned to run along it (kept upright).
   const lengths = p.legs.map((leg) => {
     const a = turn(legPoint(leg, 0))

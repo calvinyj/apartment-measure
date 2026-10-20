@@ -1,5 +1,5 @@
 import { cabinetTop } from '../cabinets/checks'
-import { legPoint, outline, placeCabinet, type Placement } from '../cabinets/placement'
+import { boxSpan, legPoint, outline, placeCabinet, type Placement } from '../cabinets/placement'
 import type { Solved } from '../geometry/solve'
 import type { Cabinet, Vec2 } from '../types'
 import { inkOn } from './CabinetDrawings'
@@ -56,8 +56,8 @@ function CabinetShape({ c, p, level }: PlacedCabinet) {
       <g>
         <polygon points={pts(planOutline({ c, p, level }))} fill={c.fronts.color} {...line} strokeWidth={1.5} />
         {p.legs.map((leg, k) => {
-          const u0 = leg.from + leg.cornerLeft
-          const [a, b, cc, d] = [legPoint(leg, u0), legPoint(leg, leg.to), legPoint(leg, leg.to, c.depth), legPoint(leg, u0, c.depth)]
+          const [u0, u1] = boxSpan(c, p, k)
+          const [a, b, cc, d] = [legPoint(leg, u0), legPoint(leg, u1), legPoint(leg, u1, c.depth), legPoint(leg, u0, c.depth)]
           return (
             <g key={k} stroke={ink.faint} strokeWidth={0.8}>
               <line x1={a.x} y1={a.y} x2={cc.x} y2={cc.y} vectorEffect="non-scaling-stroke" />

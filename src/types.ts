@@ -228,6 +228,20 @@ export interface CabinetSplit {
 
 export type CabinetSection = CabinetCell | CabinetSplit
 
+/**
+ * An inside corner of an L or U. One leg's box runs on into it, behind the end of the other leg, so it has no
+ * front: it's reached from the side, through that leg's compartment beside it.
+ */
+export interface CabinetCorner {
+  /** the side it opens to, facing it: the end of the leg before it (left) or the one after it (right) */
+  open: 'left' | 'right'
+  /** adjustable shelves in it */
+  shelves: number
+  /** as a compartment's: a set distance apart from the top or the bottom; unset = evenly */
+  shelfAlign?: 'top' | 'bottom'
+  shelfGap?: number | null
+}
+
 export interface Finish {
   /** what it is, e.g. a laminate's name or code; '' = not set */
   name: string
@@ -303,6 +317,8 @@ export interface Cabinet {
   walls: CabinetWalls
   /** the front along each of its walls, left to right */
   legs: CabinetSection[]
+  /** each inside corner, left to right; unset (or one missing) = open to the left, with nothing in it */
+  corners?: CabinetCorner[]
   /** of the carcass, without the plinth or top, mm */
   height: number
   depth: number
