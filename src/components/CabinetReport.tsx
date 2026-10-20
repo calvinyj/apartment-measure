@@ -121,7 +121,7 @@ export function CabinetsReport({ solved }: { solved: Solved }) {
             {p && (
               <div className="cab-report-drawings">
                 <Elevation cabinet={c} placement={p} />
-                <TopView cabinet={c} placement={p} />
+                <TopView solved={solved} cabinet={c} placement={p} />
               </div>
             )}
             {warnings.length > 0 && (

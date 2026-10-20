@@ -4,7 +4,8 @@ import { closeRoom, type ClosureResult } from './closure'
 import { add, dist, dot, lineIntersect, norm, outward, scale, sub } from './vec'
 import { layoutRooms, type LayoutLink } from './layout'
 import { groupMeasured, measureGroups } from './runs'
-import { area, centroid, offsetPolygon, signedArea } from './polygon'
+import { placePillars, pillarArea, type PlacedPillar } from './pillars'
+import { area, centroid, multiPolygonArea, offsetPolygon, signedArea } from './polygon'
 
 export interface Neighbor {
   roomId: string
@@ -46,9 +47,13 @@ export interface SolvedRoom {
   /** final start and end of each edge */
   starts: Vec2[]
   ends: Vec2[]
+  /** pillars against its walls, as solved */
+  pillars: PlacedPillar[]
+  /** floor area, less the pillars' */
   area: number
+  /** floor the pillars stand on, mm² */
+  pillarArea: number
   height: number
-  wallLength: number
   /** edges grouped as they're measured on site (a straight wall split in parts is one group) */
   groups: number[][]
   /** walls to measure, counting a split straight wall once */
@@ -293,15 +298,18 @@ export function solveProject(project: Project): Solved {
     const groups = measureGroups(r.room)
     const walls = groups.filter((g) => r.room.edges[g[0]].kind === 'wall')
     const measuredCount = walls.filter((g) => groupMeasured(r.room, g) != null).length
+    const pillars = placePillars(r.room, groups, starts, ends, r.dirs)
+    const pillarFloor = pillarArea(outline, pillars)
     return {
       ...r,
       outline,
       outlineEdge,
       starts,
       ends,
-      area: area(outline),
+      pillars,
+      area: area(outline) - pillarFloor,
+      pillarArea: pillarFloor,
       height: r.room.height ?? s.defaultHeight,
-      wallLength: r.room.edges.reduce((sum, e, i) => sum + (e.kind === 'wall' ? r.closure.lengths[i] : 0), 0),
       groups,
       wallCount: walls.length,
       measuredCount,
@@ -395,18 +403,4 @@ function grossFootprint(rooms: SolvedRoom[], s: Settings): MultiPolygon {
     })
   if (polys.length === 0) return []
   return polygonClipping.union(polys[0], ...polys.slice(1))
-}
-
-function ringArea(ring: [number, number][]): number {
-  let a = 0
-  for (let i = 0; i < ring.length; i++) {
-    const [x1, y1] = ring[i]
-    const [x2, y2] = ring[(i + 1) % ring.length]
-    a += x1 * y2 - x2 * y1
-  }
-  return Math.abs(a / 2)
-}
-
-export function multiPolygonArea(mp: MultiPolygon): number {
-  return mp.reduce((sum, poly) => sum + ringArea(poly[0]) - poly.slice(1).reduce((h, r) => h + ringArea(r), 0), 0)
 }

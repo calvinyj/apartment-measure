@@ -3,6 +3,7 @@ import { acZones, hpLabel, type AcZone } from '../ac'
 import { formatPrice, furnitureList, itemHref, linkSite, sizeLabel, statusTotals } from '../furniture'
 import { formatFacing, roomFacing } from '../geometry/facing'
 import { FAN_SIZES, fixtureList, formatWatts, TUBE_SIZES, type FixtureRow } from '../geometry/lights'
+import { wallFaceLength } from '../geometry/pillars'
 import { bySize, plugSchedule, type PlugTally } from '../geometry/plugs'
 import { downloadFile, useStore } from '../store'
 import { lightKindInfo, ORDER_STATUSES, roomTypeInfo, type LengthUnit, type PlugPoint } from '../types'
@@ -225,7 +226,9 @@ export function Report() {
           <div className="stat">
             <span className="stat-label">Net (carpet) area</span>
             <span className="stat-value">{formatArea(solved.netArea)}</span>
-            <span className="muted">{formatSqft(solved.netArea)} · inside the walls</span>
+            <span className="muted">
+              {formatSqft(solved.netArea)} · inside the walls{solved.rooms.some((r) => r.pillarArea > 0) && ', less pillars'}
+            </span>
           </div>
           {hasBalcony && (
             <div className="stat">
@@ -316,7 +319,8 @@ export function Report() {
                   (sum, e) => sum + (e.kind === 'wall' ? e.openings.reduce((a, o) => a + o.width * o.height, 0) : 0),
                   0,
                 )
-                const paint = r.wallLength * r.height - openings
+                // Pillars' faces are painted too, and hide the wall behind them.
+                const paint = wallFaceLength(r) * r.height - openings
                 const facing = roomFacing(solved, r)
                 return (
                   <tr key={r.room.id}>
@@ -324,6 +328,7 @@ export function Report() {
                       <span className="swatch" style={{ background: roomTypeInfo(r.room.type).color }} />
                       {r.room.name}
                       {facing.length > 0 && <div className="muted small">faces {formatFacing(facing)}</div>}
+                      {r.pillarArea > 0 && <div className="muted small">less {formatArea(r.pillarArea)} of pillars</div>}
                     </td>
                     <td className="num">{m2(r.area).toFixed(2)}</td>
                     <td className="num">{Math.round(m2(r.area) * M2_TO_SQFT)}</td>

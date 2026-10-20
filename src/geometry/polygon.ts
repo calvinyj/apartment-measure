@@ -1,3 +1,4 @@
+import type { MultiPolygon } from 'polygon-clipping'
 import type { Vec2 } from '../types'
 import { add, cross, lineIntersect, norm, outward, scale, sub } from './vec'
 
@@ -91,4 +92,18 @@ export function offsetPolygon(pts: Vec2[], offsets: number[]): Vec2[] {
     // Collinear neighbours can't both keep their offset; favour the larger (a wall over an open edge).
     return lineIntersect(pPrev, dPrev, pCur, dCur) ?? (Math.abs(offsets[iPrev]) > Math.abs(offsets[k]) ? pPrev : pCur)
   })
+}
+
+function ringArea(ring: [number, number][]): number {
+  let a = 0
+  for (let i = 0; i < ring.length; i++) {
+    const [x1, y1] = ring[i]
+    const [x2, y2] = ring[(i + 1) % ring.length]
+    a += x1 * y2 - x2 * y1
+  }
+  return Math.abs(a / 2)
+}
+
+export function multiPolygonArea(mp: MultiPolygon): number {
+  return mp.reduce((sum, poly) => sum + ringArea(poly[0]) - poly.slice(1).reduce((h, r) => h + ringArea(r), 0), 0)
 }

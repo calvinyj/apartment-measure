@@ -1,12 +1,13 @@
+import { overlapsPillar } from '../geometry/pillars'
 import type { Solved } from '../geometry/solve'
 import { cutsFor } from '../geometry/walls'
 import type { Cabinet, Cutout, LengthUnit } from '../types'
 import { formatLength } from '../units'
-import type { Placement } from './placement'
+import { outline, wallNumber, type Placement } from './placement'
 import { doorSpace, insideSpace, layOut, MIN_PART, shelfSpacing, type LaidCell } from './sections'
 
 /** An opening with its bottom below this is a doorway (or a gap down to the floor); higher up, a window. */
-const DOOR_SILL = 300
+export const DOOR_SILL = 300
 /** Stone left in front of (or behind) a cut-out, at least. */
 export const MIN_STONE_EDGE = 50
 const WIDE_DOOR = 600
@@ -31,7 +32,7 @@ export function cellUnder(c: Cabinet, p: Placement, x: Cutout): LaidCell | null 
 
 const CUTOUT_LABEL = { sink: 'sink', hob: 'hob', basin: 'basin' } as const
 
-/** Things worth a second look: running past a wall's end, over a doorway or window, too tall, wide doors, cut-outs. */
+/** Things worth a second look: running past a wall's end, over a doorway or window, into a pillar, too tall, wide doors, cut-outs. */
 export function cabinetWarnings(solved: Solved, c: Cabinet, p: Placement, unit: LengthUnit): string[] {
   const out: string[] = []
   const r = p.room
@@ -62,6 +63,11 @@ export function cabinetWarnings(solved: Solved, c: Cabinet, p: Placement, unit: 
           : `It covers part of a window on ${wall}.`,
       )
   })
+
+  // Pillars go floor to ceiling, so they're in the way of a cabinet at any height.
+  const body = outline(p, c.depth)
+  for (const pillar of r.pillars)
+    if (overlapsPillar(body, pillar)) out.push(`It runs into the pillar on wall ${wallNumber(r, pillar.edge)}.`)
 
   if (y1 > r.height + 0.5) out.push(`Its top, at ${formatLength(y1, unit)}, is above the ceiling (${formatLength(r.height, unit)}).`)
 

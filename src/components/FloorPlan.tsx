@@ -97,8 +97,8 @@ interface Obstacle {
 
 /**
  * One length per wall, just inside the room: as measured, or the worked-out length (≈) for a
- * wall that wasn't. It slides along the wall off anything in `avoid` (the room's label, plug
- * points), or is left out where there's no room for it.
+ * wall that wasn't. It slides along the wall off its pillars and anything in `avoid` (the room's
+ * label, plug points), or is left out where there's no room for it.
  */
 function WallDims({
   r,
@@ -145,6 +145,12 @@ function WallDims({
             const along = Math.abs(dot(off, d)) < tw / 2 + o.hw * cos + o.hh * sin
             const across = Math.abs(dot(off, outward(d))) < fs / 2 + o.hw * sin + o.hh * cos
             return along && across
+          }) ||
+          // Nor on a pillar, which is drawn as solid as the walls.
+          r.pillars.some((pl) => {
+            const us = pl.footprint.map((f) => dot(sub(f, q), d))
+            const vs = pl.footprint.map((f) => dot(sub(f, q), outward(d)))
+            return Math.min(...us) < tw / 2 && Math.max(...us) > -tw / 2 && Math.min(...vs) < fs / 2 && Math.max(...vs) > -fs / 2
           })
         // The middle of the wall, or as near it as is clear while the length still fits on the wall.
         const mid = add(lerp(a, b, 0.5), scale(outward(d), -fs))

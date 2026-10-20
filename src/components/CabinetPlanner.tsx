@@ -170,7 +170,7 @@ export function CabinetPlanner() {
               }
               inside={step === 'fronts' && inside}
             />
-            {(step === 'type' || step === 'top' || step === 'review') && <TopView cabinet={cab} placement={p} className="cab-drawing top" />}
+            {(step === 'type' || step === 'top' || step === 'review') && <TopView solved={solved} cabinet={cab} placement={p} className="cab-drawing top" />}
           </div>
         </div>
       ) : (

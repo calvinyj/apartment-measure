@@ -3,10 +3,11 @@ import { edgeFacing, facesAfternoonSun, formatFacing, outdoorEdges, roomFacing }
 import { bbox, centroid, pointInPolygon } from '../geometry/polygon'
 import type { SolvedRoom } from '../geometry/solve'
 import { add, dist, dot, lerp, norm, outward, scale, sub } from '../geometry/vec'
+import { placePillars, wallFaces } from '../geometry/pillars'
 import { groupMeasured, groupOf, splitMeasured } from '../geometry/runs'
 import { deviates } from '../geometry/scale'
 import { useStore, type WizardStep } from '../store'
-import { roomTypeInfo, type Edge, type Opening, type OpeningKind, type Room, type Vec2 } from '../types'
+import { roomTypeInfo, type Edge, type Opening, type OpeningKind, type Pillar, type Room, type Vec2 } from '../types'
 import { formatArea, formatLength, formatSqft } from '../units'
 import { ColorInput, Field, InstalledAcField, LengthInput, PlanImageToggle, Segmented, useSolved } from './common'
 import { CompassBadge } from './Compass'
@@ -19,6 +20,8 @@ const OPENING_DEFAULTS: Record<OpeningKind, Omit<Opening, 'id' | 'offset'>> = {
   window: { kind: 'window', width: 1200, height: 1200, sill: 900 },
   opening: { kind: 'opening', width: 900, height: 2100, sill: 0 },
 }
+
+const PILLAR_SIZE = { width: 400, depth: 300 }
 
 export function MeasureView() {
   const project = useStore((s) => s.project)
@@ -297,7 +300,7 @@ const sum = (xs: number[]) => xs.reduce((a, b) => a + b, 0)
 function WallStep({ room, s, group }: { room: Room; s: SolvedRoom; group: number[] }) {
   const settings = useStore((st) => st.project.settings)
   const rooms = useStore((st) => st.project.rooms)
-  const { updateEdge, addOpening, updateOpening, removeOpening, setWizard } = useStore.getState()
+  const { updateEdge, addOpening, updateOpening, removeOpening, addPillar, updatePillar, removePillar, setWizard } = useStore.getState()
   const solved = useSolved()
   const first = group[0]
   const edge = room.edges[first]
@@ -318,6 +321,10 @@ function WallStep({ room, s, group }: { room: Room; s: SolvedRoom; group: number
   const starts = group.map((_, j) => sum(group.slice(0, j).map((i) => s.closure.lengths[i])))
   const currentLength = sum(group.map((i) => s.closure.lengths[i]))
   const openings = group.flatMap((i, j) => room.edges[i].openings.map((o) => ({ o, edge: i, start: starts[j] })))
+  const pillars = group.flatMap((i, j) => (room.edges[i].pillars ?? []).map((p) => ({ p, edge: i, start: starts[j] })))
+  // A pillar against it (its own, or one in the corner of the next wall) is in the way of the tape.
+  const clear = sum(wallFaces(s).flatMap((f) => (!f.pillar && group.includes(f.edge) ? [dist(f.a, f.b)] : [])))
+  const behindPillar = edge.kind === 'wall' && currentLength - clear > 1
 
   const paint = edge.paint ?? settings.wallPaint
 
@@ -366,6 +373,7 @@ function WallStep({ room, s, group }: { room: Room; s: SolvedRoom; group: number
           <>
             Plan says ≈ {formatLength(estimate, unit)}.{' '}
             {edge.kind === 'open' ? 'Skip it and it will be worked out from the other walls.' : 'Skip if you can’t reach it.'}
+            {behindPillar && ' With a pillar in the way, measure up to it and add how far it runs along this wall.'}
           </>
         }
       >
@@ -494,6 +502,63 @@ function WallStep({ room, s, group }: { room: Room; s: SolvedRoom; group: number
         </div>
       )}
 
+      {edge.kind === 'wall' && (
+        <div className="openings">
+          <h3>Pillars on this wall</h3>
+          {pillars.length === 0 && (
+            <p className="muted small">None. A pillar standing out from the wall is left out of the floor area.</p>
+          )}
+          {pillars.map(({ p, edge: i, start }) => {
+            const set = (patch: Partial<Pillar>) => updatePillar(room.id, i, p.id, patch)
+            // Where it is now, from the start of its part, so it stays put when it leaves a corner.
+            const offset = p.at === 'a' ? -start : p.at === 'b' ? currentLength - p.width - start : p.offset
+            return (
+              <div key={p.id} className="opening">
+                <div className="row between">
+                  <strong>Pillar</strong>
+                  <button className="btn ghost small" onClick={() => removePillar(room.id, i, p.id)}>
+                    Remove
+                  </button>
+                </div>
+                <Segmented
+                  value={p.at ?? 'along'}
+                  onChange={(at) => set({ at: at === 'along' ? undefined : at, offset })}
+                  options={[
+                    { value: 'a', label: 'Corner A' },
+                    { value: 'along', label: 'Along the wall' },
+                    { value: 'b', label: 'Corner B' },
+                  ]}
+                />
+                <div className="grid2">
+                  <Field label="Width" hint="Along the wall">
+                    <LengthInput value={p.width} unit={unit} onChange={(v) => v != null && v > 0 && set({ width: v })} />
+                  </Field>
+                  <Field label="Depth" hint="Out from the wall">
+                    <LengthInput value={p.depth} unit={unit} onChange={(v) => v != null && v > 0 && set({ depth: v })} />
+                  </Field>
+                  {p.at == null && (
+                    <Field label="From corner A">
+                      <LengthInput value={start + p.offset} unit={unit} onChange={(v) => v != null && set({ offset: v - start })} />
+                    </Field>
+                  )}
+                </div>
+              </div>
+            )
+          })}
+          <div className="row">
+            <button
+              className="btn small"
+              onClick={() =>
+                // Stored on the first part, positioned from corner A along the whole wall.
+                addPillar(room.id, first, { ...PILLAR_SIZE, offset: Math.max(0, Math.round((currentLength - PILLAR_SIZE.width) / 2)) })
+              }
+            >
+              + Pillar
+            </button>
+          </div>
+        </div>
+      )}
+
       <StepNav room={room} s={s} step={first} nextLabel={measured == null ? 'Skip' : 'Next'} />
     </div>
   )
@@ -532,7 +597,10 @@ function SummaryStep({ room, s }: { room: Room; s: SolvedRoom }) {
         <div className="stat">
           <span className="stat-label">Floor area</span>
           <span className="stat-value">{formatArea(s.area)}</span>
-          <span className="muted">{formatSqft(s.area)}</span>
+          <span className="muted">
+            {formatSqft(s.area)}
+            {s.pillarArea > 0 && ` · less ${formatArea(s.pillarArea)} of pillars`}
+          </span>
         </div>
         <div className="stat">
           <span className="stat-label">Volume</span>
@@ -620,6 +688,7 @@ function EdgeLabels({ room, s, k, mmPerPx, active }: { room: Room; s: SolvedRoom
   const starts = s.planStarts.map(px)
   const ends = s.planEnds.map(px)
   const c = centroid(pts)
+  const pillars = placePillars(room, s.groups, s.planStarts, s.planEnds, s.dirs)
   return (
     <g pointerEvents="none">
       <polygon
@@ -630,6 +699,17 @@ function EdgeLabels({ room, s, k, mmPerPx, active }: { room: Room; s: SolvedRoom
         strokeDasharray="3 3"
         vectorEffect="non-scaling-stroke"
       />
+      {pillars.map((p) => (
+        <polygon
+          key={p.pillar.id}
+          points={p.footprint.map((q) => `${q.x / mmPerPx},${q.y / mmPerPx}`).join(' ')}
+          fill="#475569"
+          fillOpacity={active?.includes(p.edge) ? 0.8 : 0.5}
+          stroke="#1f2933"
+          strokeWidth={1}
+          vectorEffect="non-scaling-stroke"
+        />
+      ))}
       {s.groups.map((g) => {
         const a = starts[g[0]]
         const b = ends[g[g.length - 1]]
