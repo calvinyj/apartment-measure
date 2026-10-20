@@ -3,7 +3,7 @@ import type { Solved, SolvedRoom } from '../geometry/solve'
 import { cross } from '../geometry/vec'
 import { uid } from '../store'
 import { cabinetKindInfo, type Cabinet, type CabinetKind, type CabinetSection, type CabinetWalls, type Cutout, type RoomType } from '../types'
-import { placeCabinet, resolveWalls } from './placement'
+import { cornerOf, emptyCorner, placeCabinet, resolveWalls } from './placement'
 import { cell } from './sections'
 import { DEFAULT_CARCASS, DEFAULT_FRONTS, defaultTemplate, newWorktop, templateById, templateSize, type CabinetTemplate } from './templates'
 
@@ -72,6 +72,11 @@ function templateLeg(solved: Solved, c: Cabinet, walls: CabinetWalls, k: number)
  */
 function rewall(solved: Solved, c: Cabinet, walls: CabinetWalls, keep: (number | null)[]): Partial<Cabinet> {
   if (asTemplate(solved, c)) return rebuild(solved, c, walls)
+  // A corner between two legs that stay side by side stays as it was; a new one starts empty.
+  const corners = keep.slice(1).map((b, k) => {
+    const a = keep[k]
+    return a != null && b === a + 1 ? cornerOf(c, a) : emptyCorner()
+  })
   const legs = keep.map((old, k) => (old == null ? templateLeg(solved, c, walls, k) : c.legs[old] ?? templateLeg(solved, c, walls, k)))
   const top = c.top && {
     ...c.top,
@@ -80,7 +85,7 @@ function rewall(solved: Solved, c: Cabinet, walls: CabinetWalls, keep: (number |
       return k < 0 ? [] : [{ ...x, leg: k }]
     }),
   }
-  return { walls, legs, top }
+  return { walls, legs, corners, top }
 }
 
 /** Everything from the template again, on these walls: fronts, and cut-outs if it has a top. */
@@ -89,7 +94,7 @@ function rebuild(solved: Solved, c: Cabinet, walls: CabinetWalls): Partial<Cabin
   const widths = widthsOf(solved, { walls, depth: c.depth })
   if (!t || !widths) return { walls }
   const built = t.build(widths)
-  return { walls, legs: built.legs, top: c.top && { ...c.top, cutouts: withIds(built.cutouts) } }
+  return { walls, legs: built.legs, corners: undefined, top: c.top && { ...c.top, cutouts: withIds(built.cutouts) } }
 }
 
 /**
@@ -142,14 +147,19 @@ export function applyTemplate(solved: Solved, c: Cabinet, t: CabinetTemplate): P
     bottom: size.bottom,
     mount: size.mount,
     legs: built.legs,
+    corners: undefined,
     top: size.top ? { ...(c.top ?? newWorktop()), cutouts: withIds(built.cutouts) } : null,
   }
 }
 
 const withoutIds = (cutouts: (Omit<Cutout, 'id'> & { id?: string })[]) => cutouts.map(({ id: _, ...x }) => x)
 
-/** Whether its compartments and cut-outs are just as its template made them for its walls (so nothing's lost making them again). */
+/**
+ * Whether its compartments and cut-outs are just as its template made them for its walls, and its corners as
+ * they start (so nothing's lost making them again).
+ */
 export function asTemplate(solved: Solved, c: Cabinet): boolean {
+  if (c.corners?.some((x) => x.open !== 'left' || x.shelves > 0)) return false
   const t = templateById(c.template)
   const widths = widthsOf(solved, c)
   if (!t || !widths) return false

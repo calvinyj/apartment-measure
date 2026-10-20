@@ -1,7 +1,7 @@
 import { groupOf } from '../geometry/runs'
 import type { Solved, SolvedRoom } from '../geometry/solve'
 import { add, cross, dot, lineIntersect, scale, sub } from '../geometry/vec'
-import type { Cabinet, CabinetWalls, Vec2 } from '../types'
+import type { Cabinet, CabinetCorner, CabinetWalls, Vec2 } from '../types'
 
 /** One straight run of a cabinet, along one wall. */
 export interface CabinetLeg {
@@ -133,8 +133,22 @@ export function outline(p: Placement, depth: number): Vec2[] {
   return [...back, ...front.reverse()]
 }
 
-/** The carcass of each leg as built: the leg before a corner runs into it, the one after starts at its front. */
-export const carcassLength = (leg: CabinetLeg) => leg.to - leg.from - leg.cornerLeft
+/** A corner as it starts: open to the left (the leg before it runs into it), with nothing in it. */
+export const emptyCorner = (): CabinetCorner => ({ open: 'left', shelves: 0 })
+
+/** Inside corner k, between legs k and k + 1, as set. */
+export const cornerOf = (c: Pick<Cabinet, 'corners'>, k: number): CabinetCorner => c.corners?.[k] ?? emptyCorner()
+
+/**
+ * Where leg k's box starts and ends along its wall, as built: it runs on into a corner that opens to it, and
+ * stops at the other leg's front at one that doesn't.
+ */
+export function boxSpan(c: Pick<Cabinet, 'corners'>, p: Placement, k: number): [number, number] {
+  const leg = p.legs[k]
+  const intoLeft = k > 0 && cornerOf(c, k - 1).open === 'right'
+  const intoRight = k + 1 < p.legs.length && cornerOf(c, k).open === 'left'
+  return [leg.from + (intoLeft ? 0 : leg.cornerLeft), leg.to - (intoRight ? 0 : leg.cornerRight)]
+}
 
 /** Total front width, all legs. */
 export const frontWidth = (p: Placement) => p.legs.reduce((s, l) => s + l.width, 0)

@@ -77,6 +77,9 @@ export function insideSpace(c: CabinetCell, r: Rect): { n: number; drawers: Rect
   return { n, drawers: { ...r, y: r.y + r.h - h, h }, above: { ...r, h: r.h - h } }
 }
 
+/** What says where shelves go: a compartment's settings, or an inside corner's (which has no rail). */
+export type Shelving = Pick<CabinetCell, 'shelves' | 'shelfAlign' | 'shelfGap'> & { rail?: boolean }
+
 /** Shelves from the top or the bottom are this far apart, unless set. */
 export const SHELF_GAP = 300
 /** A hanging rail is this far under the shelf over it (or the top). */
@@ -87,7 +90,7 @@ const RAIL_DROP = 70
  * closer if that would leave under MIN_PART past the last one (`fits` is false then). Null when they're
  * spread evenly.
  */
-export function shelfSpacing(c: CabinetCell, h: number): { gap: number; fits: boolean } | null {
+export function shelfSpacing(c: Shelving, h: number): { gap: number; fits: boolean } | null {
   if (!c.shelfAlign || c.shelves <= 0) return null
   const want = Math.max(0, c.shelfGap ?? SHELF_GAP)
   const gap = Math.min(want, Math.max(0, (h - MIN_PART) / c.shelves))
@@ -99,7 +102,7 @@ export function shelfSpacing(c: CabinetCell, h: number): { gap: number; fits: bo
  * the shelves keep to the top over the hanging space. The rail hangs under the lowest shelf, or near the top
  * when the shelves go from the bottom.
  */
-export function shelvesIn(c: CabinetCell, r: Rect): { shelves: number[]; rail: number | null } {
+export function shelvesIn(c: Shelving, r: Rect): { shelves: number[]; rail: number | null } {
   const n = c.shelves
   const s = shelfSpacing(c, r.h)
   const shelves = Array.from({ length: n }, (_, i) =>

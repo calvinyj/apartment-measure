@@ -1,10 +1,10 @@
 import { describe, expect, it } from 'vitest'
 import { solveProject } from '../geometry/solve'
 import { DEFAULT_SETTINGS, type Cabinet, type Edge, type Opening, type Pillar, type Project, type Room } from '../types'
-import { cabinetWarnings, cellUnder } from './checks'
+import { besideCorner, cabinetWarnings, cellUnder } from './checks'
 import { applyTemplate, asTemplate, createCabinet, tapWall, withWalls } from './edit'
 import { addMaterials, allBoard, cabinetMaterials, innerBoard, outerBoard, sheetsFor } from './materials'
-import { outline, placeCabinet, type Placement } from './placement'
+import { boxSpan, outline, placeCabinet, type Placement } from './placement'
 import {
   across,
   cell,
@@ -247,6 +247,14 @@ describe('placing a cabinet on its walls', () => {
     expect(area(outline(p, 600))).toBeCloseTo(3000 * 600 + 900 * 600)
   })
 
+  it('runs the box of the leg a corner opens to on into it, the other stopping at its front', () => {
+    const c = cabinet({ walls: { roomId: 'K', edgeIds: ['e0', 'e1'], start: 1000, length: 1500 } })
+    const p = placed(c)
+    const spans = (x: Cabinet) => [boxSpan(x, p, 0), boxSpan(x, p, 1)].flat().map(Math.round)
+    expect(spans(c)).toEqual([1000, 4000, 600, 1500])
+    expect(spans({ ...c, corners: [{ open: 'right', shelves: 0 }] })).toEqual([1000, 3400, 0, 1500])
+  })
+
   it('makes a U of three walls, the middle one losing a depth at each end', () => {
     const p = placed(cabinet({ walls: { roomId: 'K', edgeIds: ['e3', 'e0', 'e1'], start: 1000, length: null } }))
     expect(p.legs.map((l) => Math.round(l.width))).toEqual([2000 - 600, 4000 - 1200, 3000 - 600])
@@ -330,6 +338,19 @@ describe('warnings', () => {
     expect(warn({ ...c(null), height: 500 })).toEqual([])
   })
 
+  it('warns about shelves in a corner with no door beside it to reach them by', () => {
+    const c = (open: 'left' | 'right') =>
+      cabinet({
+        walls: { roomId: 'K', edgeIds: ['e0', 'e1'], start: 2000, length: 1500 },
+        legs: [across([null, cell('door')], [null, cell('drawers')]), cell('door')],
+        corners: [{ open, shelves: 2 }],
+      })
+    expect(besideCorner(c('left'), placed(c('left')), 0).map((l) => l.path)).toEqual([[1]])
+    expect(warn(c('left')).join(' ')).toMatch(/corner between walls 1 and 2 has shelves, but no door beside it on wall 1/)
+    expect(warn(c('right'))).toEqual([])
+    expect(warn({ ...c('left'), corners: [{ open: 'left', shelves: 0 }] })).toEqual([])
+  })
+
   it('measures a door beside a fixed panel by what the panel leaves it', () => {
     const c = (fixedWidth: number) =>
       cabinet({ walls: { roomId: 'K', edgeIds: ['e0'], start: 0, length: 1000 }, legs: [cell('door', { hinge: 'right', fixed: 'left', fixedWidth })] })
@@ -379,6 +400,22 @@ describe('materials', () => {
     const twice = addMaterials([m, m])
     expect(twice.drawers).toBe(6)
     expect(twice.top!.cutouts).toEqual({ sink: 2 })
+  })
+
+  it('counts shelves in a corner, and builds the box of the leg it opens to on into it', () => {
+    const c = cabinet({
+      walls: { roomId: 'K', edgeIds: ['e0', 'e1'], start: 1000, length: 1500 },
+      legs: [cell('door', { hinge: 'left', shelves: 0 }), cell('door', { hinge: 'left', shelves: 0 })],
+      height: 700,
+      depth: 600,
+    })
+    const plain = cabinetMaterials(c, placed(c))
+    const shelved = cabinetMaterials({ ...c, corners: [{ open: 'left', shelves: 2 }] }, placed(c))
+    expect(shelved.shelves).toBe(2)
+    expect(shelved.board.shelves).toBeCloseTo(2 * 600 * 580)
+    // Either way round, the two boxes are as long together.
+    const right = cabinetMaterials({ ...c, corners: [{ open: 'right', shelves: 0 }] }, placed(c))
+    expect(allBoard(right.board)).toBeCloseTo(allBoard(plain.board))
   })
 
   it('counts a fixed panel as front board, with hinges and a handle only on the door beside it', () => {
@@ -466,6 +503,20 @@ describe('placing and reshaping by tapping walls', () => {
     expect(tapWall(s, u, r, 0)).toBeNull()
     expect(tap(u, 3).walls.edgeIds).toEqual(['e0', 'e1'])
     expect(tap(u, 1).walls.edgeIds).toEqual(['e3', 'e0'])
+  })
+
+  it('keeps a corner that was set with the legs either side of it, as a change to the template', () => {
+    const l = tap(start(), 1)
+    const set = { ...l, corners: [{ open: 'right' as const, shelves: 2 }] }
+    expect(asTemplate(s, set)).toBe(false)
+    // Wall 4 turns the corner at the other end: the old corner is now the second.
+    const u = tap(set, 3)
+    expect(u.corners).toEqual([
+      { open: 'left', shelves: 0 },
+      { open: 'right', shelves: 2 },
+    ])
+    expect(tap(u, 1).corners).toEqual([{ open: 'left', shelves: 0 }])
+    expect(applyTemplate(s, u, templateById('base-blank')!).corners).toBeUndefined()
   })
 
   it('moves to a wall that isn’t past either end', () => {

@@ -1,7 +1,7 @@
 import { area } from '../geometry/polygon'
 import { dist } from '../geometry/vec'
 import type { ApplianceKind, Cabinet, CabinetCell, CutoutKind } from '../types'
-import { carcassLength, outline, type Placement } from './placement'
+import { boxSpan, cornerOf, outline, type Placement } from './placement'
 import { doorSpace, insideSpace, layOut } from './sections'
 
 /** A sheet of board, 8 × 4 ft, mm². */
@@ -82,7 +82,7 @@ export const doorLeaves = (c: CabinetCell, w: number) => (c.hinge === 'pair' || 
 
 /**
  * What a cabinet takes to build, approximately: board by area (no cutting allowance), and hardware.
- * Each leg is built as one box with dividers; at a corner, the leg before it runs into the corner.
+ * Each leg is built as one box with dividers; at a corner, one leg's box runs on into it (see boxSpan).
  */
 export function cabinetMaterials(c: Cabinet, p: Placement): CabinetMaterials {
   const m: CabinetMaterials = {
@@ -106,7 +106,8 @@ export function cabinetMaterials(c: Cabinet, p: Placement): CabinetMaterials {
   p.legs.forEach((leg, k) => {
     const front = c.legs[k]
     if (!front) return
-    const L = carcassLength(leg)
+    const [u0, u1] = boxSpan(c, p, k)
+    const L = u1 - u0
     b.shell += 2 * H * D + 2 * L * D
     b.back += L * H
     if (c.mount === 'plinth') {
@@ -145,6 +146,12 @@ export function cabinetMaterials(c: Cabinet, p: Placement): CabinetMaterials {
       }
       if (cell.front === 'appliance') m.appliances[cell.appliance] = (m.appliances[cell.appliance] ?? 0) + 1
     }
+  })
+  // Shelves in each inside corner, as deep as those in a compartment.
+  p.legs.slice(1).forEach((leg, k) => {
+    const corner = cornerOf(c, k)
+    b.shelves += corner.shelves * leg.cornerLeft * (D - SHELF_SETBACK)
+    m.shelves += corner.shelves
   })
   if (c.top) {
     const t = c.top
