@@ -1703,3 +1703,25 @@ details.more summary {
 .furniture-price {
   fill: #334155;
 }
+
+/* ---------- compare with plan ---------- */
+
+.compare-row {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.compare-key {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  gap: 16px;
+}
+
+.compare-key li {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
