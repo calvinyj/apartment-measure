@@ -5,7 +5,7 @@ Check an apartment's real floor area against the advertised figure, and size the
 ## Features
 
 - **Floor area**: trace each room on the plan, measure it on site, and compare the net and built-up area with the advertised figure.
-- **Guided measuring**: go wall by wall on your phone. A reading far off the plan is flagged, a wall you can't reach is worked out from the others, and a plan that isn't quite to scale can be rescaled to your measurements.
+- **Guided measuring**: go wall by wall on your phone. A reading far off the plan is flagged, a wall you can't reach is worked out from the others, and a plan that isn't quite to scale can be rescaled to your measurements. **Compare with plan** sets every measured wall against the plan and against the room's other walls, so a misread stands out from a wall that's really built differently.
 - **Aircon sizing**: an estimate for each room or open-plan zone, allowing for the ceiling height and afternoon sun, and a check of any units already installed.
 - **Which way rooms face**: set north from the plan's arrow, and each room's outside walls get a compass direction.
 - **Electrical**: place lights, ceiling fans and plug points, with their power, colour temperature and model, and a schedule room by room.

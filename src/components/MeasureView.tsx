@@ -1,4 +1,5 @@
-import { useRef } from 'react'
+import { useMemo, useRef } from 'react'
+import { compareRoom, compareWalls } from '../geometry/compare'
 import { edgeFacing, facesAfternoonSun, formatFacing, outdoorEdges, roomFacing } from '../geometry/facing'
 import { bbox, centroid, pointInPolygon } from '../geometry/polygon'
 import type { SolvedRoom } from '../geometry/solve'
@@ -9,7 +10,8 @@ import { deviates } from '../geometry/scale'
 import { useStore, type WizardStep } from '../store'
 import { roomTypeInfo, type Edge, type Opening, type OpeningKind, type Pillar, type Room, type Vec2 } from '../types'
 import { formatArea, formatLength, formatSqft } from '../units'
-import { ColorInput, Field, InstalledAcField, LengthInput, PlanImageToggle, Segmented, useSolved } from './common'
+import { ColorInput, Field, InstalledAcField, LengthInput, PlanImageToggle, Segmented, useRememberedCheck, useSolved } from './common'
+import { CompareLayer, ComparePanel, stepNote } from './ComparePlan'
 import { CompassBadge } from './Compass'
 import { PlanView, type PointerInfo } from './PlanView'
 import { RescaleToMeasurements } from './Rescale'
@@ -29,6 +31,9 @@ export function MeasureView() {
   const setWizard = useStore((s) => s.setWizard)
   const solved = useSolved()
   const viewK = useRef(1)
+  const [compare, setCompare] = useRememberedCheck('measure:compare', false)
+  const tolerance = project.settings.closureTolerance
+  const walls = useMemo(() => compareWalls(solved, tolerance), [solved, tolerance])
 
   if (!project.image || !project.calibration) {
     return (
@@ -76,6 +81,22 @@ export function MeasureView() {
         return
       }
     }
+    if (compare) {
+      // Comparing: tapping near a wall as measured (or its label) goes to it. Where two rooms share a line,
+      // each has its own side of it, so the room tapped in comes first.
+      const q = scale(p, k)
+      const reach = ((info.pointerType === 'mouse' ? 22 : 28) / viewK.current) * k
+      const near = solved.rooms.flatMap((r) =>
+        r.starts.map((a, i) => ({ r, i, d: distToSegment(q, a, r.ends[i]), inside: pointInPolygon(q, r.outline) })),
+      )
+      const best = near
+        .filter((c) => c.d < reach)
+        .sort((a, b) => Number(b.inside) - Number(a.inside) || a.d - b.d)[0]
+      if (best) {
+        setWizard({ roomId: best.r.room.id, step: groupOf(best.r.groups, best.i)[0] })
+        return
+      }
+    }
     const hit = project.rooms.find((r) => pointInPolygon(p, r.points))
     if (hit && hit.id !== room?.id) setWizard({ roomId: hit.id, step: 'room' })
   }
@@ -95,7 +116,11 @@ export function MeasureView() {
             viewK.current = vk
             return (
               <>
-                <RoomShapes rooms={project.rooms} solved={solved} k={vk} selectedId={room?.id} dimmed={!!room} showArea={!room} />
+                {compare && !room ? (
+                  <CompareLayer solved={solved} walls={walls} k={vk} />
+                ) : (
+                  <RoomShapes rooms={project.rooms} solved={solved} k={vk} selectedId={room?.id} dimmed={!!room} showArea={!room} />
+                )}
                 {room && s && <EdgeLabels room={room} s={s} k={vk} mmPerPx={k} active={activeGroup} />}
               </>
             )
@@ -103,12 +128,19 @@ export function MeasureView() {
         </PlanView>
         <div className="canvas-toolbar">
           <PlanImageToggle />
+          <label className="check small">
+            <input type="checkbox" checked={compare} onChange={(e) => setCompare(e.target.checked)} /> Compare with plan
+          </label>
         </div>
         {project.north != null && <CompassBadge north={project.north} />}
       </div>
       <aside className="panel">
         {!room || !s ? (
-          <RoomPicker />
+          compare ? (
+            <ComparePanel solved={solved} walls={walls} />
+          ) : (
+            <RoomPicker />
+          )
         ) : step === 'room' ? (
           <RoomStep room={room} s={s} />
         ) : step === 'summary' ? (
@@ -310,6 +342,8 @@ function WallStep({ room, s, group }: { room: Room; s: SolvedRoom; group: number
   const facing = solved.north != null && outdoorEdges(solved, s).includes(main) ? edgeFacing(s, main, solved.north) : null
   const estimate = sum(group.map((i) => s.estimates[i]))
   const measured = groupMeasured(room, group)
+  const check = compareRoom(s, settings.closureTolerance).find((w) => w.group[0] === first)
+  const misread = check && (check.verdict === 'recheck' || check.verdict === 'conflict') ? check : null
   const unit = settings.inputUnit
   const number = s.groups.findIndex((g) => g[0] === first) + 1
   const { next } = neighbourSteps(s, first)
@@ -379,11 +413,24 @@ function WallStep({ room, s, group }: { room: Room; s: SolvedRoom; group: number
       >
         <LengthInput value={measured} unit={unit} placeholder={null} onChange={setMeasured} onEnter={goNext} autoFocus />
       </Field>
-      {measured != null && deviates(measured, estimate) && (
+      {check?.verdict === 'step' ? (
+        <div className="callout">{stepNote(check, unit)}</div>
+      ) : misread ? (
         <div className="callout warn">
-          That’s {Math.round(((measured - estimate) / estimate) * 100)}% off the plan. Re-check the reading, or the plan may be
-          wrong here.
+          The room’s other walls make it ≈ {formatLength(Math.round(misread.others as number), unit)}
+          {misread.verdict === 'recheck' ? ', as the plan does' : ''}. Re-check this reading
+          {misread.verdict === 'conflict' ? ', and the walls across it' : ''}.
         </div>
+      ) : (
+        measured != null &&
+        deviates(measured, estimate) && (
+          <div className="callout warn">
+            That’s {Math.round(((measured - estimate) / estimate) * 100)}% off the plan.{' '}
+            {check?.verdict === 'differs'
+              ? 'The room’s other walls agree, so the plan is probably wrong here.'
+              : 'Re-check the reading, or the plan may be wrong here.'}
+          </div>
+        )
       )}
 
       {edge.kind === 'wall' && (

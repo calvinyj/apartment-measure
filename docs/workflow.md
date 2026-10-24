@@ -29,6 +29,14 @@ On site, on your phone.
 - Optionally enter the wall thickness (measure it at a door frame) and the doors and windows on each wall.
 - Add any **pillars** standing out from a wall: their width along the wall, how far they stand out (depth), and whether they're in corner A, corner B or somewhere along the wall (then how far from corner A). One in a corner stays in that corner when the wall's length changes. The floor a pillar stands on is left out of the room's area, and it's drawn as solid as the walls on the 2D and 3D tabs. Measure the walls as if it weren't there: up to the pillar, plus how far it runs along that wall (the wall step reminds you when a pillar is in the way).
 - **Rescale** if the plan isn't to scale. Brochure plans often aren't quite to scale. Once you've measured 3 or more walls, the room list tells you if they come out consistently longer or shorter than the plan (by 1% or more), and **Rescale the plan to match** fits the scale to them. Any wall you skipped then gets a better estimate. The same option is under **Set scale** on the Plan tab, with **Undo** straight after.
+- **Compare with plan** (above the plan) checks each wall you've measured against the plan, to tell a misread from a wall that really isn't as drawn. The plan shows each room as planned (dashed) and as measured (solid), with each measured wall coloured and the ones off the plan labelled with the difference, e.g. `−150 mm`. The panel lists them, biggest difference first; tap one (in the list or on the plan) to go to that wall. Each wall is checked against what the room's other walls make it, closing the room without it:
+  - **Re-check the reading**: off the plan, while the room's other walls make it about as planned, so it's probably a misread. Or it doesn't agree with the room's other walls and it can't be told which is off: measure it again, and the walls across it.
+  - **Right if an open side is flush**: where an open side runs on one line with a wall, the plan puts the open side on the traced line and the wall's face set in from it. The wall agrees with the others if the open side is really flush with that wall.
+  - **Not as planned**: off the plan, and the room's other walls agree, so the room is built that way.
+  - **Off the plan, not checked yet**: no other measured wall checks it (e.g. the wall across it isn't measured yet).
+  - **As planned**: within 2% (or 50 mm) of the plan.
+
+  A plan that's off by the same amount everywhere makes every wall differ: rescale it first (the nudge shows here too). A wall's Measure step says the same when the room's other walls don't agree with it.
 - If the plan is wrong in places rather than just the wrong size, untick **Plan image** above the plan (Plan, Measure, 2D or 3D) to hide it for this layout.
 
 ## 3. Electrical
