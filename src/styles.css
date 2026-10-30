@@ -1725,3 +1725,46 @@ details.more summary {
   align-items: center;
   gap: 6px;
 }
+
+.report-plan-fit svg {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+
+.dialog {
+  width: min(360px, calc(100% - 32px));
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 16px;
+  background: var(--surface);
+  color: var(--ink);
+}
+
+.dialog::backdrop {
+  background: rgba(31, 41, 51, 0.35);
+}
+
+.dialog-actions {
+  justify-content: flex-end;
+}
+
+/* Drawings for the PDF, drawn off screen at the size they'll have on its page. */
+.pdf-stage {
+  position: fixed;
+  left: -10000px;
+  top: 0;
+  width: 720px;
+  pointer-events: none;
+}
+
+.pdf-stage .pdf-front {
+  width: 480px;
+  height: 190px;
+}
+
+.pdf-stage .pdf-top {
+  width: 240px;
+  height: 190px;
+}
+

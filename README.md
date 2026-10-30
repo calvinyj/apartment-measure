@@ -12,7 +12,7 @@ Check an apartment's real floor area against the advertised figure, and size the
 - **Cabinets**: plan built-in kitchen cabinets, wardrobes and vanities wall by wall (straight, L or U), with compartments, stone tops, sink and hob cut-outs, things to check, and a materials list.
 - **Furniture**: place loose furniture and appliances, with their sizes and prices, and track whether each is still to order, ordered or delivered.
 - **2D and 3D**: a floor plan drawn from your measurements, with every layer and a tool to measure between any two points, and a 3D model to orbit.
-- **Report**: all of it on one page, with a CSV export.
+- **Report**: all of it on one page, starting with a floor plan drawn from your measurements, with a CSV export and a PDF of the sections you pick.
 - **On site and on two devices**: edits are kept on the phone when there's no signal and sent once it reconnects, and a phone and a laptop can work on the same layout. A layout exports to a single file.
 
 [docs/workflow.md](docs/workflow.md) goes through each tab step by step.

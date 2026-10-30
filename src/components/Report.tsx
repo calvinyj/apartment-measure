@@ -1,67 +1,38 @@
 import { useState } from 'react'
-import { acZones, hpLabel, type AcZone } from '../ac'
+import { acZones } from '../ac'
 import { formatPrice, furnitureList, itemHref, linkSite, sizeLabel, statusTotals } from '../furniture'
 import { formatFacing, roomFacing } from '../geometry/facing'
-import { FAN_SIZES, fixtureList, formatWatts, TUBE_SIZES, type FixtureRow } from '../geometry/lights'
-import { OPENING_LABELS, openingList, type OpeningRow } from '../geometry/openings'
-import { wallFaceLength } from '../geometry/pillars'
-import { bySize, plugSchedule, type PlugTally } from '../geometry/plugs'
+import { fixtureList } from '../geometry/lights'
+import { OPENING_LABELS, openingList } from '../geometry/openings'
+import { bySize, plugSchedule } from '../geometry/plugs'
+import {
+  addTally,
+  fixtureQty,
+  fixtureRooms,
+  fixtureRuns,
+  fixtureSpec,
+  installedLabel,
+  OPENING_COLORS,
+  openingSide,
+  openingTotals,
+  paintArea,
+  pct,
+  plugRemarks,
+  plural,
+  reportCaveats,
+  suggestedLabel,
+  tallyLabel,
+} from '../report'
 import { downloadFile, useStore } from '../store'
-import { lightKindInfo, ORDER_STATUSES, roomTypeInfo, type LengthUnit, type PlugPoint } from '../types'
+import { lightKindInfo, ORDER_STATUSES, roomTypeInfo, type PlugPoint } from '../types'
 import { formatArea, formatLength, formatLengthValue, formatSqft, fmtInt, M2_TO_SQFT, m2 } from '../units'
 import { cabinetCsv, CabinetsReport } from './CabinetReport'
 import { useSolved } from './common'
+import { ExportPdf } from './ExportPdf'
 import { StatusIcon, StatusSummary } from './Furniture'
 import { LightIcon } from './Lights'
 import { PlugBadge } from './Plugs'
-
-const pct = (x: number) => `${x >= 0 ? '+' : ''}${(x * 100).toFixed(1)}%`
-const installedLabel = (z: AcZone) => z.installed.map((u) => hpLabel(u.hp)).join(' + ')
-const suggestedLabel = (z: AcZone) => `${z.units.count > 1 ? `${z.units.count} × ` : ''}${hpLabel(z.units.hp)}`
-
-/** A row of the lighting list's size, power and colour, e.g. "150 mm · 12W · 3000K"; '' when none are set. */
-function fixtureSpec(f: FixtureRow, unit: LengthUnit) {
-  const fanSize = f.kind === 'fan' && FAN_SIZES.find((s) => s.mm === f.size)
-  const tube = f.kind === 'strip' && TUBE_SIZES.find((s) => s.mm === f.size)
-  const size =
-    f.size == null
-      ? null
-      : f.kind === 'strip'
-        ? `${tube ? `${tube.feet}ft` : formatLength(f.size, unit)} tube`
-        : fanSize
-          ? `${fanSize.inches}″`
-          : `${formatLength(f.size, unit)}${f.linear ? ' long' : ''}`
-  const temp =
-    f.temp == null ? null : f.temp === 'tri' ? 'tri-colour' : f.temp === 'rgb' ? 'RGB full colour' : `${f.temp}K`
-  const colour = f.kind === 'fan' ? (temp ? `${temp} light` : 'no light') : temp
-  return [size, f.watt == null ? null : formatWatts(f.watt), colour].filter(Boolean).join(' · ')
-}
-
-/** How many to buy; for LED tube, the tubes, and the runs they light (e.g. "1 run, 2.96 m"). */
-const fixtureQty = (f: FixtureRow) => (f.kind === 'strip' ? f.tubes : f.count)
-const fixtureRuns = (f: FixtureRow) =>
-  f.kind === 'strip' ? `${f.count} run${f.count > 1 ? 's' : ''}, ${(f.length / 1000).toFixed(2)} m` : null
-
-const fixtureRooms = (f: FixtureRow) =>
-  f.rooms.map((r) => (r.count > 1 ? `${r.room.name} ×${r.count}` : r.room.name)).join(', ')
-
-const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? '' : 's'}`
-/** "3 points, 6 sockets" */
-const tallyLabel = (t: PlugTally) => `${plural(t.points, 'point')}, ${plural(t.sockets, 'socket')}`
-const addTally = (a: PlugTally, b: PlugTally) => ({ points: a.points + b.points, sockets: a.sockets + b.sockets })
-
-/** Drawn in these colours on the Measure tab's plan. */
-const OPENING_COLORS = { door: '#a16207', window: '#0ea5e9', opening: '#a16207' }
-/** What's on the other side of an opening's wall, e.g. "to Kitchen · faces W" or "outside". */
-const openingSide = (o: OpeningRow) =>
-  [o.beyond ? `to ${o.beyond.name}` : 'outside', o.faces && `faces ${o.faces}`].filter(Boolean).join(' · ')
-/** "3 doors, 5 windows, 1 opening" */
-const openingTotals = (rows: OpeningRow[]) =>
-  (['door', 'window', 'opening'] as const)
-    .map((k) => [k, rows.filter((o) => o.opening.kind === k).length] as const)
-    .filter(([, n]) => n > 0)
-    .map(([k, n]) => plural(n, k))
-    .join(', ')
+import { ReportPlan } from './ReportPlan'
 
 /** Each plug point as its badge, with its remark. */
 function PlugBadges({ plugs }: { plugs: PlugPoint[] }) {
@@ -78,13 +49,6 @@ function PlugBadges({ plugs }: { plugs: PlugPoint[] }) {
   )
 }
 
-/** A room's remarks for the CSV, e.g. "TV (new, 2 sockets); Fridge (existing, 1 socket)". */
-const plugRemarks = (plugs: PlugPoint[]) =>
-  plugs
-    .filter((p) => p.note.trim())
-    .map((p) => `${p.note.trim()} (${p.existing ? 'existing' : 'new'}, ${plural(p.count, 'socket')})`)
-    .join('; ')
-
 export function Report() {
   const project = useStore((s) => s.project)
   const setAdvertised = useStore((s) => s.setAdvertised)
@@ -93,6 +57,7 @@ export function Report() {
   const settings = project.settings
   const zones = acZones(solved, settings)
   const [advText, setAdvText] = useState(project.advertised ? String(project.advertised.value) : '')
+  const [exporting, setExporting] = useState(false)
 
   if (!solved.rooms.length || !solved.mmPerPx) {
     return (
@@ -103,9 +68,7 @@ export function Report() {
     )
   }
 
-  const complete = solved.rooms.filter((r) => r.status === 'complete').length
-  const unmeasured = solved.rooms.filter((r) => r.status !== 'complete')
-  const shaky = solved.rooms.filter((r) => r.status !== 'empty' && r.closure.checkable !== 'none' && !r.closureOk)
+  const caveats = reportCaveats(solved, settings)
   const adv = project.advertised
   const advMm2 = adv ? (adv.unit === 'sqft' ? adv.value / M2_TO_SQFT : adv.value) * 1e6 : null
   const hasBalcony = solved.rooms.some((r) => r.room.type === 'balcony')
@@ -228,29 +191,31 @@ export function Report() {
 
   return (
     <div className="page">
-      <div className="row between">
+      <div className="row between wrap">
         <h2>Report · {project.name}</h2>
-        <button className="btn" onClick={exportCsv}>
-          Export CSV
-        </button>
+        <div className="row">
+          <button className="btn" onClick={exportCsv}>
+            Export CSV
+          </button>
+          <button className="btn" onClick={() => setExporting(true)}>
+            Export PDF
+          </button>
+        </div>
       </div>
+      {exporting && <ExportPdf solved={solved} onClose={() => setExporting(false)} />}
 
-      {(unmeasured.length > 0 || shaky.length > 0) && (
+      {caveats.length > 0 && (
         <div className="callout warn">
-          {unmeasured.length > 0 && (
-            <div>
-              {complete} of {solved.rooms.length} rooms fully measured. Not finished:{' '}
-              {unmeasured.map((r) => r.room.name).join(', ')} — their figures partly rely on the plan’s scale.
-            </div>
-          )}
-          {shaky.length > 0 && (
-            <div>
-              Measurements don’t close in {shaky.map((r) => r.room.name).join(', ')} (over {settings.closureTolerance} mm). Re-check
-              before relying on the totals.
-            </div>
-          )}
+          {caveats.map((c, i) => (
+            <div key={i}>{c}</div>
+          ))}
         </div>
       )}
+
+      <section className="card">
+        <h3>Floor plan</h3>
+        <ReportPlan solved={solved} />
+      </section>
 
       <section className="card">
         <h3>Floor area</h3>
@@ -347,12 +312,7 @@ export function Report() {
             </thead>
             <tbody>
               {solved.rooms.map((r) => {
-                const openings = r.room.edges.reduce(
-                  (sum, e) => sum + (e.kind === 'wall' ? e.openings.reduce((a, o) => a + o.width * o.height, 0) : 0),
-                  0,
-                )
-                // Pillars' faces are painted too, and hide the wall behind them.
-                const paint = wallFaceLength(r) * r.height - openings
+                const paint = paintArea(r)
                 const facing = roomFacing(solved, r)
                 return (
                   <tr key={r.room.id}>

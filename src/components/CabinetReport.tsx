@@ -7,14 +7,14 @@ import { cabinetKindInfo, STONE_MATERIALS, type Cabinet, type Project } from '..
 import { Elevation, TopView } from './CabinetDrawings'
 import { appliancesText, cutoutsText, fmtM2, frontsText, MaterialsTable } from './CabinetMaterials'
 
-interface Row {
+export interface CabinetRow {
   c: Cabinet
   p: Placement | null
   m: CabinetMaterials | null
 }
 
 /** Each cabinet placed and costed in materials, in room order; one whose walls are gone has neither. */
-export function cabinetRows(project: Project, solved: Solved): Row[] {
+export function cabinetRows(project: Project, solved: Solved): CabinetRow[] {
   const order = new Map(project.rooms.map((r, i) => [r.id, i]))
   return [...project.cabinets]
     .sort((a, b) => (order.get(a.walls.roomId) ?? Infinity) - (order.get(b.walls.roomId) ?? Infinity))
@@ -27,7 +27,25 @@ export function cabinetRows(project: Project, solved: Solved): Row[] {
 const topText = (c: Cabinet) =>
   c.top ? `${STONE_MATERIALS.find((s) => s.value === c.top!.material)?.label} ${c.top.thickness} mm${c.top.finish.name ? `, ${c.top.finish.name}` : ''}` : ''
 
-const finishText = (c: Cabinet) => `${c.fronts.name || c.fronts.color} fronts, ${c.carcass.name || c.carcass.color} carcass`
+export const finishText = (c: Cabinet) => `${c.fronts.name || c.fronts.color} fronts, ${c.carcass.name || c.carcass.color} carcass`
+
+/** Where it is, e.g. "Kitchen, wall 2, 3". */
+export const placeText = (p: Placement | null) => (p ? `${p.room.room.name}, wall ${p.legs.map((l) => l.wallNo).join(', ')}` : 'not on a wall')
+
+/** e.g. "Base cabinet · L-shaped, 2,400 + 1,800 mm · 720 high × 560 deep, top at 870 mm · 4 doors · Quartz 20 mm with 1 sink · board 9.12 m²" */
+export function cabinetSummary({ c, p, m }: CabinetRow) {
+  const top = c.top && `${topText(c)}${m?.top && Object.keys(m.top.cutouts).length > 0 ? ` with ${cutoutsText(m.top.cutouts)}` : ''}`
+  return [
+    cabinetKindInfo(c.kind).label,
+    p && `${shapeLabel(p.legs.length)}, ${p.legs.map((l) => Math.round(l.width).toLocaleString()).join(' + ')} mm`,
+    `${c.height} high × ${c.depth} deep, top at ${cabinetTop(c)} mm`,
+    m && frontsText(m),
+    top,
+    m && `board ${fmtM2(allBoard(m.board))}`,
+  ]
+    .filter(Boolean)
+    .join(' · ')
+}
 
 /** CSV rows: one per cabinet, then the materials of all of them. */
 export function cabinetCsv(project: Project, solved: Solved): (string | number)[][] {
@@ -103,17 +121,9 @@ export function CabinetsReport({ solved }: { solved: Solved }) {
                   {c.name}
                 </button>
               </b>
-              <span className="muted small">{p ? `${p.room.room.name}, wall ${p.legs.map((l) => l.wallNo).join(', ')}` : 'not on a wall'}</span>
+              <span className="muted small">{placeText(p)}</span>
             </div>
-            <p className="small">
-              {cabinetKindInfo(c.kind).label}
-              {p && ` · ${shapeLabel(p.legs.length)}, ${p.legs.map((l) => Math.round(l.width).toLocaleString()).join(' + ')} mm`}
-              {` · ${c.height} high × ${c.depth} deep, top at ${cabinetTop(c)} mm`}
-              {m && frontsText(m) && ` · ${frontsText(m)}`}
-              {c.top && ` · ${topText(c)}`}
-              {m?.top && Object.keys(m.top.cutouts).length > 0 && ` with ${cutoutsText(m.top.cutouts)}`}
-              {m && ` · board ${fmtM2(allBoard(m.board))}`}
-            </p>
+            <p className="small">{cabinetSummary({ c, p, m })}</p>
             <p className="small muted">
               <span className="swatch" style={{ background: c.fronts.color }} />
               {finishText(c)}
