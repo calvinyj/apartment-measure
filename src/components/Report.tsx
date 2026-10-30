@@ -3,11 +3,12 @@ import { acZones, hpLabel, type AcZone } from '../ac'
 import { formatPrice, furnitureList, itemHref, linkSite, sizeLabel, statusTotals } from '../furniture'
 import { formatFacing, roomFacing } from '../geometry/facing'
 import { FAN_SIZES, fixtureList, formatWatts, TUBE_SIZES, type FixtureRow } from '../geometry/lights'
+import { OPENING_LABELS, openingList, type OpeningRow } from '../geometry/openings'
 import { wallFaceLength } from '../geometry/pillars'
 import { bySize, plugSchedule, type PlugTally } from '../geometry/plugs'
 import { downloadFile, useStore } from '../store'
 import { lightKindInfo, ORDER_STATUSES, roomTypeInfo, type LengthUnit, type PlugPoint } from '../types'
-import { formatArea, formatLength, formatSqft, fmtInt, M2_TO_SQFT, m2 } from '../units'
+import { formatArea, formatLength, formatLengthValue, formatSqft, fmtInt, M2_TO_SQFT, m2 } from '../units'
 import { cabinetCsv, CabinetsReport } from './CabinetReport'
 import { useSolved } from './common'
 import { StatusIcon, StatusSummary } from './Furniture'
@@ -48,6 +49,19 @@ const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? '' : 's'}`
 /** "3 points, 6 sockets" */
 const tallyLabel = (t: PlugTally) => `${plural(t.points, 'point')}, ${plural(t.sockets, 'socket')}`
 const addTally = (a: PlugTally, b: PlugTally) => ({ points: a.points + b.points, sockets: a.sockets + b.sockets })
+
+/** Drawn in these colours on the Measure tab's plan. */
+const OPENING_COLORS = { door: '#a16207', window: '#0ea5e9', opening: '#a16207' }
+/** What's on the other side of an opening's wall, e.g. "to Kitchen · faces W" or "outside". */
+const openingSide = (o: OpeningRow) =>
+  [o.beyond ? `to ${o.beyond.name}` : 'outside', o.faces && `faces ${o.faces}`].filter(Boolean).join(' · ')
+/** "3 doors, 5 windows, 1 opening" */
+const openingTotals = (rows: OpeningRow[]) =>
+  (['door', 'window', 'opening'] as const)
+    .map((k) => [k, rows.filter((o) => o.opening.kind === k).length] as const)
+    .filter(([, n]) => n > 0)
+    .map(([k, n]) => plural(n, k))
+    .join(', ')
 
 /** Each plug point as its badge, with its remark. */
 function PlugBadges({ plugs }: { plugs: PlugPoint[] }) {
@@ -108,6 +122,7 @@ export function Report() {
   const toAddBySize = bySize(plugRows.flatMap((r) => r.toAddPlugs.map((p) => p.count)))
   const furniture = furnitureList(project.rooms, project.furniture)
   const statusOf = (v: string) => ORDER_STATUSES.find((s) => s.value === v)!.label
+  const openings = openingList(solved)
 
   const exportCsv = () => {
     const rows = [
@@ -126,6 +141,23 @@ export function Report() {
       [],
       ['Total net', '', '', m2(solved.netArea).toFixed(2), (m2(solved.netArea) * M2_TO_SQFT).toFixed(1)],
       ['Estimated built-up (incl. walls)', '', '', m2(solved.grossArea).toFixed(2), (m2(solved.grossArea) * M2_TO_SQFT).toFixed(1)],
+      ...(openings.length
+        ? [
+            [],
+            ['Door or window', 'Room', 'Wall', 'Other side', 'Faces', 'Width (mm)', 'Height (mm)', 'Sill (mm)', 'From corner A (mm)'],
+            ...openings.map((o) => [
+              OPENING_LABELS[o.opening.kind],
+              o.room.name,
+              o.wallNo,
+              o.beyond?.name ?? 'outside',
+              o.faces ?? '',
+              Math.round(o.opening.width),
+              Math.round(o.opening.height),
+              Math.round(o.opening.sill),
+              Math.round(o.from),
+            ]),
+          ]
+        : []),
       [],
       ['Aircon zone', 'Rooms', 'Afternoon sun', 'Area (ft2)', 'BTU/h', 'Installed', 'Installed BTU/h', 'Installed enough', 'Suggested'],
       ...zones.map((z) => [
@@ -359,6 +391,70 @@ export function Report() {
             </tfoot>
           </table>
         </div>
+      </section>
+
+      <section className="card">
+        <h3>Doors &amp; windows</h3>
+        {openings.length === 0 ? (
+          <p className="muted">
+            No doors or windows yet. Add them wall by wall on the{' '}
+            <button className="link" onClick={() => setTab('measure')}>
+              Measure
+            </button>{' '}
+            tab.
+          </p>
+        ) : (
+          <>
+            <div className="table-wrap">
+              <table className="table">
+                <thead>
+                  <tr>
+                    <th>Room</th>
+                    <th>Wall</th>
+                    <th>Type</th>
+                    <th>Size (W × H)</th>
+                    <th className="num">Sill</th>
+                    <th className="num">From corner A</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {openings.map((o) => (
+                    <tr key={o.opening.id}>
+                      <td>{o.room.name}</td>
+                      <td>
+                        wall {o.wallNo}
+                        <div className="muted small">{openingSide(o)}</div>
+                      </td>
+                      <td className="nowrap">
+                        <span className="swatch" style={{ background: OPENING_COLORS[o.opening.kind] }} />
+                        {OPENING_LABELS[o.opening.kind]}
+                      </td>
+                      <td className="nowrap">
+                        {formatLengthValue(o.opening.width, unit)} × {formatLengthValue(o.opening.height, unit)} {unit}
+                      </td>
+                      <td className="num nowrap">{o.opening.sill > 0 ? formatLength(o.opening.sill, unit) : <span className="muted">–</span>}</td>
+                      <td className="num nowrap">{formatLength(o.from, unit)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+                <tfoot>
+                  <tr>
+                    <td>Total</td>
+                    <td colSpan={5}>{openingTotals(openings)}</td>
+                  </tr>
+                </tfoot>
+              </table>
+            </div>
+            <p className="muted small">
+              As entered on each wall of the{' '}
+              <button className="link" onClick={() => setTab('measure')}>
+                Measure
+              </button>{' '}
+              tab, where the walls are numbered. The sill is from the floor to the bottom, and the position is from the wall’s
+              corner A to the near side. A door between two rooms is listed in the room it was entered in.
+            </p>
+          </>
+        )}
       </section>
 
       <section className="card">
