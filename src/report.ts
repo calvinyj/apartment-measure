@@ -78,7 +78,15 @@ export function fixtureSpec(f: FixtureRow, unit: LengthUnit) {
           ? `${fanSize.inches}″`
           : `${formatLength(f.size, unit)}${f.linear ? ' long' : ''}`
   const temp =
-    f.temp == null ? null : f.temp === 'tri' ? 'tri-colour' : f.temp === 'rgb' ? 'RGB full colour' : `${f.temp}K`
+    f.temp == null
+      ? null
+      : f.temp === 'tri'
+        ? 'tri-colour'
+        : f.temp === 'tunable'
+          ? 'white tunable'
+          : f.temp === 'rgb'
+            ? 'RGB full colour'
+            : `${f.temp}K`
   const colour = f.kind === 'fan' ? (temp ? `${temp} light` : 'no light') : temp
   return [size, f.watt == null ? null : formatWatts(f.watt), colour].filter(Boolean).join(' · ')
 }
