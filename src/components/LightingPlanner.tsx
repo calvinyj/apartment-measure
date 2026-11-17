@@ -664,7 +664,7 @@ function LightInspector({
   }
 
   const setTemp = (v: string) =>
-    updateLight(light.id, { temp: v === '' ? null : v === 'tri' || v === 'rgb' ? v : Number(v) })
+    updateLight(light.id, { temp: v === '' ? null : v === 'tri' || v === 'tunable' || v === 'rgb' ? v : Number(v) })
 
   return (
     <div className="stack">

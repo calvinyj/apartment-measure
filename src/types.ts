@@ -112,10 +112,10 @@ export const LIGHT_KINDS: { value: LightKind; label: string; plural: string; lin
 ]
 
 /**
- * Colour temperature in kelvin, 'tri' for a light that switches between three, or 'rgb' for a
- * full-colour one (RGB).
+ * Colour temperature in kelvin, 'tri' for a light that switches between three, 'tunable' for a
+ * white tunable one (dims anywhere from warm to cool white), or 'rgb' for a full-colour one (RGB).
  */
-export type LightTemp = number | 'tri' | 'rgb'
+export type LightTemp = number | 'tri' | 'tunable' | 'rgb'
 
 export const LIGHT_TEMPS: { value: LightTemp; label: string }[] = [
   { value: 2700, label: '2700K · warm' },
@@ -123,6 +123,7 @@ export const LIGHT_TEMPS: { value: LightTemp; label: string }[] = [
   { value: 4000, label: '4000K · cool white' },
   { value: 6500, label: '6500K · daylight' },
   { value: 'tri', label: 'Tri-colour (3CCT)' },
+  { value: 'tunable', label: 'White tunable' },
   { value: 'rgb', label: 'RGB full colour' },
 ]
 
